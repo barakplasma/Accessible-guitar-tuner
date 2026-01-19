@@ -260,15 +260,6 @@ function initialize()
 
 	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
 	document.getElementById("cycle-string").addEventListener("click", cycle_string);
-	document.getElementById("toggle-tts").addEventListener("click", toggle_text_to_speech);
-	
-	// Load voices for text-to-speech
-	if (speech_synthesis) {
-		speech_synthesis.getVoices();
-		speech_synthesis.onvoiceschanged = function() {
-			speech_synthesis.getVoices();
-		};
-	}
 	
 	// Announce that tuner is ready
 	setTimeout(function() {
@@ -324,32 +315,8 @@ function use_stream(stream)
 	var sample_length_milliseconds = 100;
 	var recording = true;
 	
-	// Try to use AudioWorklet (modern approach)
-	if (audio_context.audioWorklet) {
-		audio_context.audioWorklet.addModule('audio-processor.js').then(function() {
-			var audio_worklet_node = new AudioWorkletNode(audio_context, 'audio-processor');
-			
-			// Handle messages from the audio processor
-			audio_worklet_node.port.onmessage = function(event) {
-				if (event.data.type === 'audio-data') {
-					process_audio_buffer(event.data.buffer, audio_context.sampleRate);
-				}
-			};
-			
-			microphone.connect(audio_worklet_node);
-			audio_worklet_node.connect(audio_context.destination);
-			
-			update_status("Listening for notes... (AudioWorklet enabled)");
-			console.log("AudioWorklet loaded successfully");
-		}).catch(function(error) {
-			console.error("Error loading AudioWorklet, falling back to ScriptProcessorNode:", error);
-			fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording);
-		});
-	} else {
-		// Fallback to ScriptProcessorNode for older browsers
-		console.log("AudioWorklet not supported, using ScriptProcessorNode");
-		fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording);
-	}
+	// Use ScriptProcessorNode for compatibility
+	fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording);
 	
 	function process_audio_buffer(audio_buffer, sample_rate) {
 		// Pause detection while speech synthesis is speaking
@@ -392,7 +359,7 @@ function use_stream(stream)
 		};
 		
 		script_processor.onaudioprocess = window.capture_audio;
-		update_status("Listening for notes... (ScriptProcessorNode fallback)");
+		update_status("Listening for notes...");
 	}
 }
 
@@ -438,8 +405,6 @@ function interpret_correlation_result(event)
 			last_announced_note = note_name;
 			last_announced_frequency = parseFloat(frequency);
 			
-			// Reset speech pause detection when we detect a new note
-			detection_paused_for_speech = false;
 		}
 		
 		// Update confidence indicator
@@ -475,12 +440,6 @@ var current_string_index = 0;
 var playing = false;
 var last_announced_note = "";
 var last_announced_frequency = 0;
-var use_text_to_speech = false;
-var speech_synthesis = window.speechSynthesis;
-var last_spoken_text = "";
-var last_speak_time = 0;
-var is_speaking = false;
-var detection_paused_for_speech = false;
 
 function toggle_playing_note()
 {
@@ -577,57 +536,6 @@ function announce_to_screen_reader(message, priority) {
 			document.body.removeChild(announcer);
 		}
 	}, 1000);
-	
-	// Text-to-speech announcement (if enabled)
-	if (use_text_to_speech && speech_synthesis) {
-		speak_text(message);
-	}
-}
-
-function speak_text(text) {
-	// Prevent too frequent repetitions
-	var now = Date.now();
-	if (text === last_spoken_text && now - last_speak_time < 2000) {
-		return; // Don't repeat same text within 2 seconds
-	}
-	
-	// Cancel any ongoing speech
-	speech_synthesis.cancel();
-	
-	var utterance = new SpeechSynthesisUtterance(text);
-	utterance.rate = 1.0;
-	utterance.pitch = 1.0;
-	utterance.volume = 0.8;
-	
-	// Try to get a good voice
-	var voices = speech_synthesis.getVoices();
-	if (voices.length > 0) {
-		// Prefer English voices
-		var english_voice = voices.find(function(voice) {
-			return voice.lang.startsWith('en');
-		});
-		if (english_voice) {
-			utterance.voice = english_voice;
-		}
-	}
-	
-	utterance.onstart = function() {
-		is_speaking = true;
-		last_spoken_text = text;
-		last_speak_time = now;
-	};
-	
-	utterance.onend = function() {
-		is_speaking = false;
-		detection_paused_for_speech = false;
-	};
-	
-	utterance.onerror = function() {
-		is_speaking = false;
-		detection_paused_for_speech = false;
-	};
-	
-	speech_synthesis.speak(utterance);
 }
 
 function vibrate_for_success() {
@@ -637,28 +545,6 @@ function vibrate_for_success() {
 	}
 }
 
-function toggle_text_to_speech() {
-	use_text_to_speech = !use_text_to_speech;
-	var toggle_button = document.getElementById("toggle-tts");
-	
-	if (use_text_to_speech) {
-		if (speech_synthesis) {
-			// Load voices
-			speech_synthesis.getVoices();
-			toggle_button.textContent = "Disable Voice Announcements";
-			toggle_button.setAttribute("aria-pressed", "true");
-			announce_to_screen_reader("Voice announcements enabled", "polite");
-		} else {
-			alert("Text-to-speech is not supported in your browser");
-			use_text_to_speech = false;
-		}
-	} else {
-		toggle_button.textContent = "Enable Voice Announcements";
-		toggle_button.setAttribute("aria-pressed", "false");
-		speech_synthesis.cancel();
-		announce_to_screen_reader("Voice announcements disabled", "polite");
-	}
-}
 </script>
 </head>
 
@@ -676,11 +562,9 @@ function toggle_text_to_speech() {
             <li><strong>Listen</strong> for the note name and frequency announcement</li>
             <li><strong>Feel the vibration</strong> when your note is perfectly in tune (on supported devices)</li>
             <li><strong>Use the reference tone buttons</strong> to hear any of the six guitar string notes for comparison (optional)</li>
-            <li><strong>Enable voice announcements</strong> if you don't have a screen reader (optional)</li>
         </ol>
         <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
-        <p><strong>For users without screen readers:</strong> Click "Enable Voice Announcements" to hear note names spoken aloud using text-to-speech.</p>
-        <p><strong>Vibration feedback:</strong> When you play a note that's perfectly in tune, your device will vibrate (if supported). Voice announcements automatically pause while speaking to avoid interference.</p>
+        <p><strong>Vibration feedback:</strong> When you play a note that's perfectly in tune, your device will vibrate (if supported).</p>
     </div>
     
     <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
@@ -712,13 +596,9 @@ function toggle_text_to_speech() {
             <button id="play-note" class="button" role="switch" aria-pressed="false" aria-describedby="play-note-description">
                 Play E (low) reference note
             </button>
-            <button id="toggle-tts" class="button" role="switch" aria-pressed="false" aria-describedby="tts-description">
-                Enable Voice Announcements
-            </button>
         </div>
         <p id="cycle-string-description" class="sr-only">Cycle through all six guitar strings for reference tones (E low, A, D, G, B, E high)</p>
         <p id="play-note-description" class="sr-only">Click to start or stop the currently selected reference note</p>
-        <p id="tts-description" class="sr-only">Toggle voice announcements for detected notes and status updates (alternative to screen reader)</p>
     </section>
     
     <nav role="navigation" aria-labelledby="links-heading">
