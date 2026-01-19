@@ -414,9 +414,9 @@ function interpret_correlation_result(event)
 		// Check if note is perfectly in tune and vibrate for success
 		var is_perfect_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
 		                      dominant_frequency.name.indexOf('flat') === -1 &&
-		                      confidence_percent > 70;
+		                      confidence_percent > 50;
 		
-		if (is_perfect_tune && note_name !== last_announced_note) {
+		if (is_perfect_tune) {
 			vibrate_for_success();
 		}
 	}
@@ -518,7 +518,9 @@ function cycle_string()
 	
 	// Provide vibration feedback
 	if ("vibrate" in navigator) {
+		console.log("String selection vibration");
 		navigator.vibrate(50); // Short vibration to confirm selection
+		console.log("String selection vibration result:", navigator.vibrate(50));
 	}
 }
 
@@ -540,8 +542,19 @@ function announce_to_screen_reader(message, priority) {
 
 function vibrate_for_success() {
 	if ("vibrate" in navigator) {
+		console.log("Attempting vibration...");
 		// Vibrate pattern: short burst, pause, short burst (success confirmation)
-		navigator.vibrate([100, 50, 100]);
+		var vibrate_success = navigator.vibrate([100, 50, 100]);
+		console.log("Vibration result:", vibrate_success);
+		
+		// Also try a simpler pattern if the first one doesn't work
+		if (!vibrate_success) {
+			setTimeout(function() {
+				navigator.vibrate(200);
+			}, 300);
+		}
+	} else {
+		console.log("Vibration API not supported");
 	}
 }
 
