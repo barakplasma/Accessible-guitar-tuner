@@ -5,70 +5,222 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="description" content="Accessible guitar tuner for blind and visually impaired users. Provides audio pitch detection with screen reader support.">
 <title>Accessible Guitar Tuner</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
 <style>
-body {
-    font-family: system-ui, -apple-system, sans-serif;
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 20px;
-    line-height: 1.6;
+/* Custom styles to complement pico.css */
+:root {
+    --pico-font-size: 100%;
+    --pico-line-height: 1.5;
 }
+
+body {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 1rem;
+}
+
+/* Enhanced header styling */
 h1 {
     font-size: 3rem;
     min-height: 1.2em;
-    margin: 20px 0;
+    margin: 1.5rem 0;
+    text-align: center;
+    color: var(--pico-primary);
 }
+
+/* Tuner display card */
 .tuner-display {
-    background: #f5f5f5;
-    border: 2px solid #333;
-    border-radius: 8px;
-    padding: 30px;
-    margin: 20px 0;
+    background: var(--pico-card-background-color, #fff);
+    border: 2px solid var(--pico-primary, #0284c7);
+    border-radius: var(--pico-border-radius, 0.5rem);
+    padding: 2rem;
+    margin: 1.5rem 0;
+    text-align: center;
+    box-shadow: var(--pico-box-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+}
+
+/* Frequency display enhancement */
+.frequency-display {
+    font-size: 1.75rem;
+    font-weight: bold;
+    color: var(--pico-contrast, #1a1a1a);
+}
+
+#note-name {
+    font-size: 4rem;
+    font-weight: bold;
+    color: var(--pico-primary, #0284c7);
+    margin: 1rem 0;
+}
+
+#frequency {
+    color: var(--pico-muted, #6b7280);
+    font-size: 2rem;
+}
+
+#confidence {
+    font-size: 1.1rem;
+    color: var(--pico-muted, #6b7280);
+    font-weight: normal;
+}
+
+/* Button styling using pico classes */
+.button {
+    font-size: 1.2rem;
+    padding: 1rem 2rem;
+    margin: 0.5rem;
+    border-radius: var(--pico-border-radius, 0.5rem);
+    transition: all var(--pico-transition, 0.2s ease);
+}
+
+.button:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--pico-box-shadow, 0 4px 12px rgba(0, 0, 0, 0.15));
+}
+
+.button:active {
+    transform: translateY(0);
+}
+
+/* Status messages */
+.status-message {
+    margin: 1rem 0;
+    padding: 1rem;
+    border-radius: var(--pico-border-radius, 0.5rem);
+    font-weight: 500;
     text-align: center;
 }
-.frequency-display {
-    font-size: 1.5rem;
-    font-weight: bold;
+
+.status-listening {
+    background: var(--pico-primary-background, #d4edda);
+    border: 1px solid var(--pico-primary, #0284c7);
+    color: var(--pico-primary-inverse, #fff);
 }
-button {
-    font-size: 1.2rem;
-    padding: 15px 30px;
-    margin: 10px;
-    border: 2px solid #333;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
+
+.status-error {
+    background: var(--pico-error-background, #f8d7da);
+    border: 1px solid var(--pico-error, #dc3545);
+    color: var(--pico-error-inverse, #fff);
 }
-button:focus {
-    outline: 3px solid #005fcc;
+
+/* Instructions section */
+.instructions {
+    background: var(--pico-background-color, #f8f9fa);
+    padding: 1.5rem;
+    border-radius: var(--pico-border-radius, 0.5rem);
+    margin: 1.5rem 0;
+    border-left: 4px solid var(--pico-primary, #0284c7);
+}
+
+.instructions h2 {
+    margin-top: 0;
+    color: var(--pico-primary, #0284c7);
+}
+
+.instructions ol {
+    padding-left: 1.5rem;
+}
+
+.instructions li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+/* Navigation links */
+nav {
+    margin-top: 2rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--pico-muted-border, #e5e7eb);
+    text-align: center;
+}
+
+nav a {
+    color: var(--pico-primary, #0284c7);
+    text-decoration: none;
+    margin: 0 0.5rem;
+}
+
+nav a:hover {
+    text-decoration: underline;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    h1 {
+        font-size: 2rem;
+    }
+    
+    #note-name {
+        font-size: 2.5rem;
+    }
+    
+    #frequency {
+        font-size: 1.5rem;
+    }
+    
+    .button {
+        font-size: 1rem;
+        padding: 0.875rem 1.5rem;
+        width: 100%;
+        max-width: 300px;
+    }
+    
+    .tuner-display {
+        padding: 1.5rem;
+    }
+}
+
+/* Accessibility improvements */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+/* Focus visible for keyboard navigation */
+:focus-visible {
+    outline: 3px solid var(--pico-primary, #0284c7);
     outline-offset: 2px;
 }
-button:active {
-    background: #e0e0e0;
-}
-.status-message {
-    margin: 15px 0;
-    padding: 10px;
-    border-radius: 4px;
-}
-.status-listening {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-}
-.status-error {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-}
-.instructions {
-    background: #e9ecef;
-    padding: 20px;
-    border-radius: 6px;
-    margin: 20px 0;
-}
+
+/* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
-    * {
-        animation: none !important;
-        transition: none !important;
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .tuner-display {
+        border-width: 3px;
+    }
+    
+    .button {
+        border-width: 2px;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --pico-primary: #38bdf8;
+        --pico-primary-background: #0c4a6e;
+        --pico-background-color: #1f2937;
+        --pico-card-background-color: #111827;
+        --pico-contrast: #f9fafb;
+        --pico-muted: #9ca3af;
     }
 }
 </style>
@@ -270,14 +422,14 @@ function announce_to_screen_reader(message, priority) {
 </head>
 
 <body>
-<main role="main">
+<main class="container">
     <header>
         <h1>Accessible Guitar Tuner</h1>
     </header>
     
     <div class="instructions" role="region" aria-labelledby="instructions-heading">
         <h2 id="instructions-heading">How to Use</h2>
-        <ol>
+        <ol class="breadcrumbs-list">
             <li><strong>Allow microphone access</strong> when prompted</li>
             <li><strong>Play a note</strong> on your guitar or other instrument</li>
             <li><strong>Listen</strong> for the note name and frequency announcement</li>
@@ -289,22 +441,30 @@ function announce_to_screen_reader(message, priority) {
     <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
     
     <section class="tuner-display" role="region" aria-labelledby="tuner-heading">
+        <div class="grid">
         <h2 id="tuner-heading" class="sr-only">Tuner Display</h2>
-        <p>It sounds like you're playing...</p>
-        <h1 id="note-name" aria-live="polite" aria-atomic="true" tabindex="0"></h1>
-        <p class="frequency-display">
-            <span id="confidence" aria-live="polite" style="display: block; margin: 10px 0; font-size: 1rem; color: #666;"></span>
-            <span>Frequency:</span>
-            <span id="frequency" aria-live="polite" aria-atomic="true"></span>
-            <span> Hertz</span>
-        </p>
+            <div>
+                <p><strong>It sounds like you're playing...</strong></p>
+                <h1 id="note-name" aria-live="polite" aria-atomic="true" tabindex="0"></h1>
+            </div>
+            <div>
+                <p class="frequency-display">
+                    <span id="confidence" aria-live="polite"></span>
+                    <span>Frequency:</span>
+                    <span id="frequency" aria-live="polite" aria-atomic="true"></span>
+                    <span> Hertz</span>
+                </p>
+            </div>
+        </div>
     </section>
     
     <section role="region" aria-labelledby="controls-heading">
         <h2 id="controls-heading" class="sr-only">Controls</h2>
-        <button id="play-note" aria-pressed="false" aria-describedby="play-note-description">
-            Play E reference note
-        </button>
+        <div class="grid">
+            <button id="play-note" class="button" role="switch" aria-pressed="false" aria-describedby="play-note-description">
+                Play E reference note
+            </button>
+        </div>
         <p id="play-note-description" class="sr-only">Click to start or stop a reference E note at 82.41 Hertz</p>
     </section>
     
