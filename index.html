@@ -254,6 +254,7 @@ function initialize()
 	
 	get_user_media.call(navigator, { "audio": true }, use_stream, function(error) {
 		console.error("Microphone access denied:", error);
+		update_audio_status("❌ Microphone access denied");
 		update_status("Error: Microphone access denied. Please allow microphone access to use the tuner.", "error");
 		document.getElementById("note-name").textContent = "No audio input";
 	});
@@ -264,13 +265,24 @@ function initialize()
 	// Announce that tuner is ready
 	setTimeout(function() {
 		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
+		// Test vibration to show it works
+		if ("vibrate" in navigator) {
+			console.log("Testing vibration on startup...");
+			navigator.vibrate(100);
+			console.log("Test vibration completed");
+		}
 	}, 1000);
 	
-	// Check vibration API support
+	// Check and display vibration API support
+	var vibration_status = document.getElementById("vibration-status");
 	if ("vibrate" in navigator) {
 		console.log("Vibration API supported");
+		vibration_status.textContent = "✅ Vibration supported";
+		vibration_status.style.color = "green";
 	} else {
 		console.log("Vibration API not supported");
+		vibration_status.textContent = "❌ Vibration not supported on this device";
+		vibration_status.style.color = "orange";
 	}
 	
 	// Set git tag dynamically
@@ -286,6 +298,19 @@ function initialize()
 		.catch(function(error) {
 			console.log('Could not fetch git tag:', error);
 		});
+}
+
+function update_audio_status(status) {
+	var audio_status_element = document.getElementById("audio-status");
+	audio_status_element.textContent = status;
+	
+	if (status.includes("✅")) {
+		audio_status_element.style.color = "green";
+	} else if (status.includes("❌")) {
+		audio_status_element.style.color = "red";
+	} else {
+		audio_status_element.style.color = "blue";
+	}
 }
 
 function update_status(message, type) {
@@ -305,6 +330,7 @@ function update_status(message, type) {
 
 function use_stream(stream)
 {
+	update_audio_status("✅ Microphone connected");
 	update_status("Listening for notes...");
 	
 	var audio_context = new AudioContext();
@@ -402,9 +428,10 @@ function interpret_correlation_result(event)
 		// Vibrate when note is in tune with good confidence
 		var is_in_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
 		                     dominant_frequency.name.indexOf('flat') === -1 &&
-		                     confidence_percent > 30;
+		                     confidence_percent > 20;
 		
 		if (is_in_tune) {
+			console.log("Note in tune! Confidence:", confidence_percent, "%");
 			vibrate_for_success();
 		}
 	}
@@ -474,7 +501,8 @@ function vibrate_for_success() {
             <li><strong>Feel the vibration</strong> when your note is perfectly in tune (on supported devices)</li>
         </ol>
         <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
-        <p><strong>Vibration feedback:</strong> When you play a note that's in tune, your device will vibrate (if supported).</p>
+        <p><strong>Vibration feedback:</strong> <span id="vibration-status">Checking...</span> When you play a note that's in tune, your device will vibrate.</p>
+        <p><strong>Audio status:</strong> <span id="audio-status">Checking...</span></p>
     </div>
     
     <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
