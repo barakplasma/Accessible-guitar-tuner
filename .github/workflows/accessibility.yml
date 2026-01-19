@@ -1,0 +1,295 @@
+name: Accessibility Testing
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+  workflow_dispatch:
+
+jobs:
+  accessibility:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run accessibility tests
+      run: npm test
+
+    - name: Install Pa11y CLI
+      run: npm install -g pa11y
+
+    - name: Create test server for accessibility testing
+      run: |
+        # Start a simple HTTP server in background
+        python3 -m http.server 8080 &
+        SERVER_PID=$!
+        echo "SERVER_PID=$SERVER_PID" >> $GITHUB_ENV
+        echo "Started HTTP server with PID: $SERVER_PID"
+        
+        # Wait for server to start
+        sleep 5
+
+    - name: Run Pa11y accessibility tests
+      run: |
+        echo "## Accessibility Test Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Test the main page
+        echo "### Testing Main Page (http://localhost:8080)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        pa11y http://localhost:8080 --reporter json --level error > pa11y-results.json || true
+        
+        if [ -s pa11y-results.json ]; then
+          echo "#### Pa11y found issues:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Format and display results
+          node -e "
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync('pa11y-results.json', 'utf8'));
+          
+          if (results.length > 0) {
+            console.log('Found ' + results.length + ' accessibility issues:');
+            results.forEach((issue, index) => {
+              console.log((index + 1) + '. **' + issue.type + '**: ' + issue.message);
+              console.log('   - Context: ' + issue.context);
+              console.log('   - Selector: ' + issue.selector);
+              console.log('');
+            });
+          } else {
+            console.log('No accessibility issues found! ✅');
+          }
+          " >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ No accessibility issues found!" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Run HTML validation with axe-core
+      run: |
+        npm install -g @axe-core/cli
+        
+        echo "### axe-core Accessibility Scan" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        axe http://localhost:8080 --tags wcag2a,wcag2aa,wcag2aa > axe-results.json || true
+        
+        if [ -s axe-results.json ]; then
+          echo "#### axe-core scan results:" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          node -e "
+          const fs = require('fs');
+          const results = JSON.parse(fs.readFileSync('axe-results.json', 'utf8'));
+          
+          if (results.violations && results.violations.length > 0) {
+            console.log('Found ' + results.violations.length + ' WCAG violations:');
+            results.violations.forEach((violation, index) => {
+              console.log((index + 1) + '. **' + violation.id + '**: ' + violation.description);
+              console.log('   - Impact: ' + violation.impact);
+              console.log('   - Affected elements: ' + violation.nodes.length);
+              
+              if (violation.nodes.length > 0) {
+                console.log('   - Sample targets:');
+                violation.nodes.slice(0, 3).forEach(node => {
+                  console.log('     - ' + (node.target ? node.target.join(', ') : 'N/A'));
+                });
+              }
+              console.log('');
+            });
+          } else {
+            console.log('No WCAG violations found! ✅');
+          }
+          " >> $GITHUB_STEP_SUMMARY
+        else
+          echo "✅ No WCAG violations found!" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Check ARIA attributes with custom script
+      run: |
+        echo "### ARIA Attributes Validation" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        node -e "
+        const fs = require('fs');
+        const html = fs.readFileSync('index.html', 'utf8');
+        
+        // Check for proper ARIA attributes
+        const ariaChecks = {
+          'aria-live regions': html.match(/aria-live/g) || [],
+          'aria-atomic attributes': html.match(/aria-atomic/g) || [],
+          'role attributes': html.match(/role=/g) || [],
+          'aria-labels': html.match(/aria-label/g) || [],
+          'aria-describedby': html.match(/aria-describedby/g) || [],
+          'aria-labelledby': html.match(/aria-labelledby/g) || []
+        };
+        
+        console.log('ARIA Implementation Summary:');
+        console.log('- aria-live regions: ' + ariaChecks['aria-live regions'].length);
+        console.log('- aria-atomic attributes: ' + ariaChecks['aria-atomic attributes'].length);
+        console.log('- role attributes: ' + ariaChecks['role attributes'].length);
+        console.log('- aria-labels: ' + ariaChecks['aria-labels'].length);
+        console.log('- aria-describedby: ' + ariaChecks['aria-describedby'].length);
+        console.log('- aria-labelledby: ' + ariaChecks['aria-labelledby'].length);
+        console.log('');
+        
+        // Check for proper semantic HTML
+        const semanticElements = {
+          'main': html.match(/<main/g) || [],
+          'nav': html.match(/<nav/g) || [],
+          'header': html.match(/<header/g) || [],
+          'section': html.match(/<section/g) || [],
+          'h1': html.match(/<h1/g) || [],
+          'h2': html.match(/<h2/g) || [],
+          'h3': html.match(/<h3/g) || []
+        };
+        
+        console.log('Semantic HTML Structure:');
+        console.log('- <main> elements: ' + semanticElements.main.length);
+        console.log('- <nav> elements: ' + semanticElements.nav.length);
+        console.log('- <header> elements: ' + semanticElements.header.length);
+        console.log('- <section> elements: ' + semanticElements.section.length);
+        console.log('- <h1> elements: ' + semanticElements.h1.length);
+        console.log('- <h2> elements: ' + semanticElements.h2.length);
+        console.log('- <h3> elements: ' + semanticElements.h3.length);
+        console.log('');
+        
+        // Check for accessibility issues
+        const issues = [];
+        
+        // Check for images without alt text
+        const images = html.match(/<img[^>]*>/g) || [];
+        images.forEach(img => {
+          if (!img.includes('alt=')) {
+            issues.push('Image found without alt attribute');
+          }
+        });
+        
+        // Check for form inputs without labels
+        const inputs = html.match(/<input[^>]*>/g) || [];
+        inputs.forEach(input => {
+          if (!input.includes('aria-label=') && !input.includes('id=')) {
+            issues.push('Input found without label or accessible name');
+          }
+        });
+        
+        // Check for links with unclear text
+        const links = html.match(/<a[^>]*>[^<]*<\/a>/g) || [];
+        links.forEach(link => {
+          const text = link.replace(/<[^>]*>/g, '');
+          if (text.trim() === '' || text === 'click here' || text === 'read more') {
+            issues.push('Link found with unclear text: \"' + text + '\"');
+          }
+        });
+        
+        if (issues.length > 0) {
+          console.log('Potential Issues Found:');
+          issues.forEach((issue, index) => {
+            console.log((index + 1) + '. ' + issue);
+          });
+        } else {
+          console.log('✅ No basic accessibility issues detected!');
+        }
+        " >> $GITHUB_STEP_SUMMARY
+
+    - name: Test screen reader compatibility
+      run: |
+        echo "### Screen Reader Compatibility" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        node -e "
+        const fs = require('fs');
+        const html = fs.readFileSync('index.html', 'utf8');
+        
+        const checks = {
+          'lang attribute': html.includes('lang='),
+          'title element': html.includes('<title>'),
+          'skip links': html.includes('sr-only') || html.includes('.sr-only'),
+          'focus management': html.includes('tabindex'),
+          'semantic landmarks': html.includes('role=') || html.includes('<main>') || html.includes('<nav>'),
+          'heading hierarchy': html.includes('<h1>') && html.includes('<h2>'),
+          'alt attributes': html.includes('alt='),
+          'aria descriptions': html.includes('aria-describedby') || html.includes('aria-labelledby')
+        };
+        
+        console.log('Screen Reader Compatibility:');
+        Object.entries(checks).forEach(([check, passed]) => {
+          console.log((passed ? '✅' : '❌') + ' ' + check);
+        });
+        
+        const allPassed = Object.values(checks).every(v => v);
+        console.log('');
+        console.log('Overall: ' + (allPassed ? '✅ Compatible' : '⚠️ Needs attention'));
+        " >> $GITHUB_STEP_SUMMARY
+
+    - name: Generate accessibility score
+      if: always()
+      run: |
+        echo "### Accessibility Score" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Calculate accessibility score based on tests
+        SCORE=0
+        MAX_SCORE=100
+        
+        # Basic structure (20 points)
+        if grep -q "<main" index.html; then SCORE=$((SCORE + 5)); fi
+        if grep -q "<nav" index.html; then SCORE=$((SCORE + 5)); fi
+        if grep -q "role=" index.html; then SCORE=$((SCORE + 5)); fi
+        if grep -q "lang=" index.html; then SCORE=$((SCORE + 5)); fi
+        
+        # ARIA implementation (30 points)
+        if grep -q "aria-live" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "aria-label" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "aria-describedby\|aria-labelledby" index.html; then SCORE=$((SCORE + 10)); fi
+        
+        # Semantic HTML (25 points)
+        if grep -q "<h1>" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "<h2>" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "<section>" index.html; then SCORE=$((SCORE + 5)); fi
+        
+        # Screen reader support (25 points)
+        if grep -q "sr-only\|\.sr-only" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "tabindex" index.html; then SCORE=$((SCORE + 10)); fi
+        if grep -q "alt=" index.html; then SCORE=$((SCORE + 5)); fi
+        
+        echo "🎯 **Accessibility Score: $SCORE/100**" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $SCORE -ge 80 ]; then
+          echo "✅ **Excellent accessibility!**" >> $GITHUB_STEP_SUMMARY
+        elif [ $SCORE -ge 60 ]; then
+          echo "⚠️ **Good accessibility with room for improvement.**" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ **Accessibility needs attention.**" >> $GITHUB_STEP_SUMMARY
+        fi
+
+    - name: Cleanup test server
+      if: always()
+      run: |
+        if [ -n "$SERVER_PID" ]; then
+          echo "Stopping HTTP server (PID: $SERVER_PID)"
+          kill $SERVER_PID || true
+        fi
+
+    - name: Upload accessibility results as artifacts
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: accessibility-results
+        path: |
+          pa11y-results.json
+          axe-results.json
+        retention-days: 30
