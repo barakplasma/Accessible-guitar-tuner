@@ -259,6 +259,7 @@ function initialize()
 	});
 
 	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
+	document.getElementById("cycle-string").addEventListener("click", cycle_string);
 	document.getElementById("toggle-tts").addEventListener("click", toggle_text_to_speech);
 	
 	// Load voices for text-to-speech
@@ -437,6 +438,16 @@ var note_context = null;
 var note_node = null;
 var gain_node = null;
 
+// Guitar string frequencies (standard tuning EADGBE)
+var guitar_strings = [
+    { name: "E (low)", frequency: 82.41 },
+    { name: "A", frequency: 110.00 },
+    { name: "D", frequency: 146.83 },
+    { name: "G", frequency: 196.00 },
+    { name: "B", frequency: 246.94 },
+    { name: "E (high)", frequency: 329.63 }
+];
+var current_string_index = 0;
 var playing = false;
 var last_announced_note = "";
 var last_announced_frequency = 0;
@@ -455,7 +466,8 @@ function toggle_playing_note()
 			note_context = new (window.AudioContext || window.webkitAudioContext)();
 			note_node = note_context.createOscillator();
 			gain_node = note_context.createGain();
-			note_node.frequency.value = C2 * Math.pow(2, 4 / 12); // E, ~82.41 Hz.
+			note_node.type = 'sine'; // Pure sine wave for clear tone
+			note_node.frequency.value = guitar_strings[current_string_index].frequency;
 			note_node.connect(gain_node);
 			gain_node.connect(note_context.destination);
 			note_node.start();
@@ -475,17 +487,55 @@ function toggle_playing_note()
 	}
 	
 	playing = !playing;
+	var current_string = guitar_strings[current_string_index];
+	
 	if (playing) {
+		// Update frequency in case we switched strings
+		note_node.frequency.setValueAtTime(current_string.frequency, note_context.currentTime);
 		gain_node.gain.setValueAtTime(0, note_context.currentTime);
 		gain_node.gain.linearRampToValueAtTime(0.1, note_context.currentTime + 0.01);
-		announce_to_screen_reader("Playing E reference note", "status");
-		document.getElementById("play-note").textContent = "Stop E reference note";
+		
+		var announcement = "Playing " + current_string.name + " reference note at " + current_string.frequency.toFixed(2) + " Hertz";
+		announce_to_screen_reader(announcement, "status");
+		
+		document.getElementById("play-note").textContent = "Stop " + current_string.name + " reference note";
 		document.getElementById("play-note").setAttribute("aria-pressed", "true");
+		document.getElementById("current-string-display").textContent = current_string.name + " (" + current_string.frequency.toFixed(2) + " Hz)";
 	} else {
 		gain_node.gain.linearRampToValueAtTime(0, note_context.currentTime + 0.01);
-		announce_to_screen_reader("Stopped E reference note", "status");
-		document.getElementById("play-note").textContent = "Play E reference note";
+		
+		var stop_announcement = "Stopped " + current_string.name + " reference note";
+		announce_to_screen_reader(stop_announcement, "status");
+		
+		document.getElementById("play-note").textContent = "Play " + current_string.name + " reference note";
 		document.getElementById("play-note").setAttribute("aria-pressed", "false");
+	}
+}
+
+function cycle_string()
+{
+	// Stop current note if playing
+	if (playing) {
+		toggle_playing_note();
+	}
+	
+	// Move to next string
+	current_string_index = (current_string_index + 1) % guitar_strings.length;
+	var current_string = guitar_strings[current_string_index];
+	
+	// Update display
+	document.getElementById("current-string-display").textContent = current_string.name + " (" + current_string.frequency.toFixed(2) + " Hz)";
+	
+	// Update button text
+	document.getElementById("play-note").textContent = "Play " + current_string.name + " reference note";
+	
+	// Announce the change
+	var announcement = "Selected " + current_string.name + " string at " + current_string.frequency.toFixed(2) + " Hertz";
+	announce_to_screen_reader(announcement, "polite");
+	
+	// Provide vibration feedback
+	if ("vibrate" in navigator) {
+		navigator.vibrate(50); // Short vibration to confirm selection
 	}
 }
 
@@ -601,7 +651,7 @@ function toggle_text_to_speech() {
             <li><strong>Play a note</strong> on your guitar or other instrument</li>
             <li><strong>Listen</strong> for the note name and frequency announcement</li>
             <li><strong>Feel the vibration</strong> when your note is perfectly in tune (on supported devices)</li>
-            <li><strong>Use the reference tone button</strong> to hear an E note for comparison (optional)</li>
+            <li><strong>Use the reference tone buttons</strong> to hear any of the six guitar string notes for comparison (optional)</li>
             <li><strong>Enable voice announcements</strong> if you don't have a screen reader (optional)</li>
         </ol>
         <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
@@ -632,14 +682,18 @@ function toggle_text_to_speech() {
     <section role="region" aria-labelledby="controls-heading">
         <h2 id="controls-heading" class="sr-only">Controls</h2>
         <div class="grid">
+            <button id="cycle-string" class="button" aria-describedby="cycle-string-description">
+                🔄 Change String (Current: <span id="current-string-display">E (low) (82.41 Hz)</span>)
+            </button>
             <button id="play-note" class="button" role="switch" aria-pressed="false" aria-describedby="play-note-description">
-                Play E reference note
+                Play E (low) reference note
             </button>
             <button id="toggle-tts" class="button" role="switch" aria-pressed="false" aria-describedby="tts-description">
                 Enable Voice Announcements
             </button>
         </div>
-        <p id="play-note-description" class="sr-only">Click to start or stop a reference E note at 82.41 Hertz</p>
+        <p id="cycle-string-description" class="sr-only">Cycle through all six guitar strings for reference tones (E low, A, D, G, B, E high)</p>
+        <p id="play-note-description" class="sr-only">Click to start or stop the currently selected reference note</p>
         <p id="tts-description" class="sr-only">Toggle voice announcements for detected notes and status updates (alternative to screen reader)</p>
     </section>
     

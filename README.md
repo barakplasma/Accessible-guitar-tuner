@@ -8,7 +8,8 @@ An accessible, browser-based guitar tuner designed with blind and visually impai
 - **Accurate Pitch Detection** - Uses correlation-based algorithm for precise frequency analysis
 - **Real-time Note Identification** - Automatically detects and announces notes as you play
 - **Confidence Meter** - Shows detection reliability to help you tune more accurately
-- **Reference Tone** - Built-in E note (82.41 Hz) for comparison tuning
+- **Reference Tones** - All six guitar string tones (E-A-D-G-B-E) for comparison tuning
+- **Vibration Feedback** - Device vibrates when notes are perfectly in tune (inspired by [Anthony S. Ferraro's accessible guitar pedal concept](https://youtube.com/shorts/Bf3_jVREd20))
 
 ### ♿ Accessibility Features (Optimized for Blind Users)
 - **Screen Reader Announcements** - Automatic audio announcements of detected notes and frequencies
@@ -50,8 +51,9 @@ An accessible, browser-based guitar tuner designed with blind and visually impai
 1. **Allow Microphone Access** - Grant permission when prompted
 2. **Play a Note** - Strum a string on your guitar or other instrument
 3. **Listen for Announcement** - The tuner will announce the detected note and frequency
-4. **Tune Your Instrument** - Adjust until you hear the correct note
-5. **Reference Tone** (Optional) - Use the E note button for comparison
+4. **Feel the Vibration** - When your note is perfectly in tune, your device will vibrate (on supported devices)
+5. **Tune Your Instrument** - Adjust until you get the correct note and feel the confirmation vibration
+6. **Reference Tones** (Optional) - Use the reference tone buttons to hear any of the six guitar strings for comparison
 
 ### For Screen Reader Users
 - Enable your screen reader before opening the tuner
@@ -99,8 +101,8 @@ Modify the `confidence_threshold` in `index.html` (currently set to 10):
 - Lower values = more sensitive (may detect false positives)
 - Higher values = less sensitive (may miss weak signals)
 
-### Change Reference Note
-Modify the frequency calculation in the `toggle_playing_note()` function
+### Customize Reference Tones
+The guitar strings array in the JavaScript code defines the six standard tuning frequencies. You can modify `guitar_strings` in `index.html` to use alternate tunings.
 
 ### Adjust Test Frequencies
 Edit the frequency generation loop to change the note range or add more variations
@@ -124,6 +126,7 @@ MIT License - See [LICENSE.md](LICENSE.md) for details
 - Based on the original guitar tuner by [Jonathan Bergknoff](http://jonathan.bergknoff.com/journal/making-a-guitar-tuner-html5)
 - Enhanced with comprehensive accessibility features
 - Styled with [Pico.css](https://picocss.com/)
+- **Vibration feedback feature inspired by [Anthony S. Ferraro's accessible guitar pedal concept](https://youtube.com/shorts/Bf3_jVREd20)** - His vision of a guitar pedal that vibrates when each string is in tune for blind musicians directly inspired the vibration confirmation feature in this tuner
 
 ## 🌟 Key Accessibility Improvements Over Original
 
