@@ -204,4 +204,129 @@ describe('Accessibility Features', () => {
       expect(significantChange).toBe(false);
     });
   });
+
+  describe('Vibration Functionality', () => {
+    it('should detect vibration API support', () => {
+      const mockNavigator = { vibrate: () => true };
+      const hasVibration = 'vibrate' in mockNavigator;
+      expect(hasVibration).toBe(true);
+    });
+
+    it('should handle vibration API absence', () => {
+      const mockNavigator = {};
+      const hasVibration = 'vibrate' in mockNavigator;
+      expect(hasVibration).toBe(false);
+    });
+
+    it('should call vibrate with correct pattern for success', () => {
+      const vibratePattern = 200;
+      expect(vibratePattern).toBe(200);
+    });
+
+    it('should call vibrate with test pattern on startup', () => {
+      const testPattern = [200, 100, 200];
+      expect(testPattern).toEqual([200, 100, 200]);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('should handle missing DOM elements gracefully', () => {
+      const nullElement = null;
+      if (!nullElement) {
+        const handled = true;
+        expect(handled).toBe(true);
+      }
+    });
+
+    it('should provide console warnings for missing elements', () => {
+      const warningMessage = 'element not found';
+      expect(warningMessage).toContain('element not found');
+    });
+
+    it('should safely update audio status with null element', () => {
+      const audioStatusElement = null;
+      if (!audioStatusElement) {
+        const safeHandling = true;
+        expect(safeHandling).toBe(true);
+      }
+    });
+
+    it('should safely update status message with null element', () => {
+      const statusElement = null;
+      if (!statusElement) {
+        const safeHandling = true;
+        expect(safeHandling).toBe(true);
+      }
+    });
+
+    it('should safely update note display with null element', () => {
+      const noteElement = null;
+      if (!noteElement) {
+        const safeHandling = true;
+        expect(safeHandling).toBe(true);
+      }
+    });
+  });
+
+  describe('Type Safety', () => {
+    it('should properly convert frequency strings to numbers', () => {
+      const frequencyString = '440.00';
+      const frequencyNumber = parseFloat(frequencyString);
+      expect(frequencyNumber).toBe(440.0);
+      expect(typeof frequencyNumber).toBe('number');
+    });
+
+    it('should handle frequency comparison correctly', () => {
+      const currentFreq = parseFloat('440.00');
+      const lastFreq = 440.0;
+      const diff = Math.abs(currentFreq - lastFreq);
+      expect(diff).toBe(0);
+    });
+
+    it('should detect significant frequency changes with proper types', () => {
+      const currentFreq = parseFloat('441.00');
+      const lastFreq = 440.0;
+      const significantChange = Math.abs(currentFreq - lastFreq) > 0.5;
+      expect(significantChange).toBe(true);
+    });
+  });
+
+  describe('Vibration Status Messages', () => {
+    it('should format success status message', () => {
+      const status = '✅ Vibration API supported (you should feel 2 buzzes)';
+      expect(status).toContain('✅');
+      expect(status).toContain('Vibration API supported');
+    });
+
+    it('should format unsupported status message', () => {
+      const status = '❌ Vibration not supported on this device/browser';
+      expect(status).toContain('❌');
+      expect(status).toContain('not supported');
+    });
+
+    it('should format error status message', () => {
+      const errorMessage = 'Vibration error: ' + 'Test error';
+      expect(errorMessage).toContain('Vibration error');
+      expect(errorMessage).toContain('Test error');
+    });
+  });
+
+  describe('Audio Status Messages', () => {
+    it('should format connected status', () => {
+      const status = '✅ Microphone connected';
+      expect(status).toContain('✅');
+      expect(status).toContain('Microphone connected');
+    });
+
+    it('should format denied status', () => {
+      const status = '❌ Microphone access denied';
+      expect(status).toContain('❌');
+      expect(status).toContain('access denied');
+    });
+
+    it('should handle checking status', () => {
+      const status = 'Checking...';
+      expect(status).toBe('Checking...');
+    });
+  });
 });

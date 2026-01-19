@@ -256,7 +256,10 @@ function initialize()
 		console.error("Microphone access denied:", error);
 		update_audio_status("❌ Microphone access denied");
 		update_status("Error: Microphone access denied. Please allow microphone access to use the tuner.", "error");
-		document.getElementById("note-name").textContent = "No audio input";
+		var note_element = document.getElementById("note-name");
+		if (note_element) {
+			note_element.textContent = "No audio input";
+		}
 	});
 
 	// Reference note feature removed - screen readers provide sufficient accessibility
@@ -322,6 +325,10 @@ function initialize()
 
 function update_audio_status(status) {
 	var audio_status_element = document.getElementById("audio-status");
+	if (!audio_status_element) {
+		console.warn("audio-status element not found");
+		return;
+	}
 	audio_status_element.textContent = status;
 	
 	if (status.includes("✅")) {
@@ -335,6 +342,10 @@ function update_audio_status(status) {
 
 function update_status(message, type) {
 	var status_element = document.getElementById("status-message");
+	if (!status_element) {
+		console.warn("status-message element not found");
+		return;
+	}
 	status_element.textContent = message;
 	status_element.className = "status-message";
 	if (type === "error") {
@@ -430,11 +441,17 @@ function interpret_correlation_result(event)
 		var note_name = dominant_frequency.name;
 		var frequency = dominant_frequency.frequency.toFixed(2);
 		
-		document.getElementById("note-name").textContent = note_name;
-		document.getElementById("frequency").textContent = frequency;
+		var note_element = document.getElementById("note-name");
+		var frequency_element = document.getElementById("frequency");
+		if (note_element) {
+			note_element.textContent = note_name;
+		}
+		if (frequency_element) {
+			frequency_element.textContent = frequency;
+		}
 		
 		// Announce to screen reader only when note changes
-		if (note_name !== last_announced_note || Math.abs(frequency - last_announced_frequency) > 0.5) {
+		if (note_name !== last_announced_note || Math.abs(parseFloat(frequency) - last_announced_frequency) > 0.5) {
 			var announcement = "Detected " + note_name + " at " + frequency + " Hertz";
 			announce_to_screen_reader(announcement, "polite");
 			last_announced_note = note_name;
@@ -443,7 +460,10 @@ function interpret_correlation_result(event)
 		
 		// Update confidence indicator
 		var confidence_percent = Math.min(100, Math.round((confidence - 10) / 90 * 100));
-		document.getElementById("confidence").textContent = "Confidence: " + confidence_percent + "%";
+		var confidence_element = document.getElementById("confidence");
+		if (confidence_element) {
+			confidence_element.textContent = "Confidence: " + confidence_percent + "%";
+		}
 		
 		// Vibrate when note is in tune with good confidence
 		var is_in_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
@@ -457,12 +477,6 @@ function interpret_correlation_result(event)
 	}
 }
 
-// Reference note audio context - initialized on first user interaction
-var note_context = null;
-var note_node = null;
-var gain_node = null;
-
-var playing = false;
 var last_announced_note = "";
 var last_announced_frequency = 0;
 
@@ -554,19 +568,5 @@ function vibrate_for_success() {
         </p>
     </nav>
 </main>
-
-<style>
-.sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border-width: 0;
-}
-</style>
 </body>
 </html>
