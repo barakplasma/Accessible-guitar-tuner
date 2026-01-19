@@ -273,6 +273,27 @@ function initialize()
 	setTimeout(function() {
 		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
 	}, 1000);
+	
+	// Check vibration API support
+	if ("vibrate" in navigator) {
+		console.log("Vibration API supported");
+	} else {
+		console.log("Vibration API not supported");
+	}
+	
+	// Set git tag dynamically
+	fetch('https://api.github.com/repos/barakplasma/Accessible-guitar-tuner/git/refs/heads/master')
+		.then(function(response) {
+			return response.json();
+		})
+		.then(function(data) {
+			var shortSha = data.object.sha.substring(0, 7);
+			document.getElementById('git-tag').textContent = shortSha;
+			document.getElementById('git-tag').title = 'Full SHA: ' + data.object.sha;
+		})
+		.catch(function(error) {
+			console.log('Could not fetch git tag:', error);
+		});
 }
 
 function update_status(message, type) {
@@ -311,6 +332,21 @@ function use_stream(stream)
 	// http://lists.w3.org/Archives/Public/public-audio/2013JanMar/0304.html
 	window.capture_audio = function(event)
 	{
+		// Pause detection while speech synthesis is speaking
+		if (is_speaking) {
+			if (!detection_paused_for_speech) {
+				detection_paused_for_speech = true;
+				update_status("Pausing detection for voice announcement...");
+			}
+			return;
+		}
+		
+		// Resume detection when speech finishes
+		if (detection_paused_for_speech) {
+			detection_paused_for_speech = false;
+			update_status("Listening for notes...");
+		}
+		
 		if (!recording)
 			return;
 
@@ -384,6 +420,15 @@ function interpret_correlation_result(event)
 		// Update confidence indicator
 		var confidence_percent = Math.min(100, Math.round((confidence - 10) / 90 * 100));
 		document.getElementById("confidence").textContent = "Confidence: " + confidence_percent + "%";
+		
+		// Check if note is perfectly in tune and vibrate for success
+		var is_perfect_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
+		                      dominant_frequency.name.indexOf('flat') === -1 &&
+		                      confidence_percent > 70;
+		
+		if (is_perfect_tune && note_name !== last_announced_note) {
+			vibrate_for_success();
+		}
 	}
 }
 
@@ -399,6 +444,8 @@ var use_text_to_speech = false;
 var speech_synthesis = window.speechSynthesis;
 var last_spoken_text = "";
 var last_speak_time = 0;
+var is_speaking = false;
+var detection_paused_for_speech = false;
 
 function toggle_playing_note()
 {
@@ -491,11 +538,29 @@ function speak_text(text) {
 	}
 	
 	utterance.onstart = function() {
+		is_speaking = true;
 		last_spoken_text = text;
 		last_speak_time = now;
 	};
 	
+	utterance.onend = function() {
+		is_speaking = false;
+		detection_paused_for_speech = false;
+	};
+	
+	utterance.onerror = function() {
+		is_speaking = false;
+		detection_paused_for_speech = false;
+	};
+	
 	speech_synthesis.speak(utterance);
+}
+
+function vibrate_for_success() {
+	if ("vibrate" in navigator) {
+		// Vibrate pattern: short burst, pause, short burst (success confirmation)
+		navigator.vibrate([100, 50, 100]);
+	}
 }
 
 function toggle_text_to_speech() {
@@ -535,11 +600,13 @@ function toggle_text_to_speech() {
             <li><strong>Allow microphone access</strong> when prompted</li>
             <li><strong>Play a note</strong> on your guitar or other instrument</li>
             <li><strong>Listen</strong> for the note name and frequency announcement</li>
+            <li><strong>Feel the vibration</strong> when your note is perfectly in tune (on supported devices)</li>
             <li><strong>Use the reference tone button</strong> to hear an E note for comparison (optional)</li>
             <li><strong>Enable voice announcements</strong> if you don't have a screen reader (optional)</li>
         </ol>
         <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
         <p><strong>For users without screen readers:</strong> Click "Enable Voice Announcements" to hear note names spoken aloud using text-to-speech.</p>
+        <p><strong>Vibration feedback:</strong> When you play a note that's perfectly in tune, your device will vibrate (if supported). Voice announcements automatically pause while speaking to avoid interference.</p>
     </div>
     
     <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
@@ -578,8 +645,12 @@ function toggle_text_to_speech() {
     
     <nav role="navigation" aria-labelledby="links-heading">
         <h2 id="links-heading" class="sr-only">Related Links</h2>
-        <a href="https://github.com/jbergknoff/guitar-tuner">Source code</a> / 
+        <a href="https://github.com/barakplasma/Accessible-guitar-tuner">Source code</a> / 
         <a href="http://jonathan.bergknoff.com/journal/making-a-guitar-tuner-html5">Explanatory article</a>
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--pico-muted);">
+            Version: <code id="git-tag">latest</code> | 
+            <a href="https://github.com/barakplasma/Accessible-guitar-tuner/commits/" style="font-size: 0.9rem;">View commits</a>
+        </p>
     </nav>
 </main>
 
