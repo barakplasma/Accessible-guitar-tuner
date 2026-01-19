@@ -310,9 +310,6 @@ function initialize() {
 	setTimeout(() => {
 		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
 	}, 1000);
-
-	// Fetch and display git version information
-	fetchGitVersion();
 }
 
 /**
@@ -813,35 +810,6 @@ function vibrate_for_success() {
 }
 
 // ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
-
-/**
- * Fetch and display the current git commit SHA in the UI.
- * Provides version information for debugging and transparency.
- *
- * @function fetchGitVersion
- * @returns {void}
- * @private
- */
-function fetchGitVersion() {
-	fetch('https://api.github.com/repos/barakplasma/Accessible-guitar-tuner/git/refs/heads/master')
-		.then(response => response.json())
-		.then(data => {
-			const shortSha = data.object.sha.substring(0, 7);
-			const git_tag_element = document.getElementById('git-tag');
-
-			if (git_tag_element) {
-				git_tag_element.textContent = shortSha;
-				git_tag_element.title = `Full SHA: ${data.object.sha}`;
-			}
-		})
-		.catch(error => {
-			console.log('Could not fetch git tag:', error);
-		});
-}
-
-// ============================================================================
 // APPLICATION STARTUP
 // ============================================================================
 
@@ -895,12 +863,8 @@ window.addEventListener("load", initialize);
     
     <nav role="navigation" aria-labelledby="links-heading">
         <h2 id="links-heading" class="sr-only">Related Links</h2>
-        <a href="https://github.com/barakplasma/Accessible-guitar-tuner">Source code</a> / 
+        <a href="https://github.com/barakplasma/Accessible-guitar-tuner">Source code</a> /
         <a href="http://jonathan.bergknoff.com/journal/making-a-guitar-tuner-html5">Explanatory article</a>
-        <p style="margin-top: 1rem; font-size: 0.9rem; color: var(--pico-muted);">
-            Version: <code id="git-tag">latest</code> | 
-            <a href="https://github.com/barakplasma/Accessible-guitar-tuner/commits/" style="font-size: 0.9rem;">View commits</a>
-        </p>
     </nav>
 </main>
 </body>

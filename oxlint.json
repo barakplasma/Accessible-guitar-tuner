@@ -1,0 +1,14 @@
+{
+  "ignore": [
+    "node_modules/**",
+    "coverage/**",
+    "dist/**",
+    "*.html"
+  ],
+  "rules": {
+    "no-unused-vars": "error",
+    "no-console": "warn",
+    "prefer-const": "error",
+    "no-var": "error"
+  }
+}
