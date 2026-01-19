@@ -319,60 +319,81 @@ function use_stream(stream)
 	var audio_context = new AudioContext();
 	var microphone = audio_context.createMediaStreamSource(stream);
 	window.source = microphone; // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=934512
-	var script_processor = audio_context.createScriptProcessor(1024, 1, 1);
-
-	script_processor.connect(audio_context.destination);
-	microphone.connect(script_processor);
-
+	
 	var buffer = [];
 	var sample_length_milliseconds = 100;
 	var recording = true;
-
-	// Need to leak this function into the global namespace so it doesn't get
-	// prematurely garbage-collected.
-	// http://lists.w3.org/Archives/Public/public-audio/2013JanMar/0304.html
-	window.capture_audio = function(event)
-	{
+	
+	// Try to use AudioWorklet (modern approach)
+	if (audio_context.audioWorklet) {
+		audio_context.audioWorklet.addModule('audio-processor.js').then(function() {
+			var audio_worklet_node = new AudioWorkletNode(audio_context, 'audio-processor');
+			
+			// Handle messages from the audio processor
+			audio_worklet_node.port.onmessage = function(event) {
+				if (event.data.type === 'audio-data') {
+					process_audio_buffer(event.data.buffer, audio_context.sampleRate);
+				}
+			};
+			
+			microphone.connect(audio_worklet_node);
+			audio_worklet_node.connect(audio_context.destination);
+			
+			update_status("Listening for notes... (AudioWorklet enabled)");
+			console.log("AudioWorklet loaded successfully");
+		}).catch(function(error) {
+			console.error("Error loading AudioWorklet, falling back to ScriptProcessorNode:", error);
+			fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording);
+		});
+	} else {
+		// Fallback to ScriptProcessorNode for older browsers
+		console.log("AudioWorklet not supported, using ScriptProcessorNode");
+		fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording);
+	}
+	
+	function process_audio_buffer(audio_buffer, sample_rate) {
 		// Pause detection while speech synthesis is speaking
 		if (is_speaking) {
-			if (!detection_paused_for_speech) {
-				detection_paused_for_speech = true;
-				update_status("Pausing detection for voice announcement...");
-			}
 			return;
 		}
 		
-		// Resume detection when speech finishes
-		if (detection_paused_for_speech) {
-			detection_paused_for_speech = false;
-			update_status("Listening for notes...");
+		if (!recording) {
+			return;
 		}
 		
-		if (!recording)
-			return;
-
-		buffer = buffer.concat(Array.prototype.slice.call(event.inputBuffer.getChannelData(0)));
-
+		buffer = buffer.concat(Array.prototype.slice.call(audio_buffer));
+		
 		// Stop recording after sample_length_milliseconds.
-		if (buffer.length > sample_length_milliseconds * audio_context.sampleRate / 1000)
-		{
+		if (buffer.length > sample_length_milliseconds * sample_rate / 1000) {
 			recording = false;
-
-			correlation_worker.postMessage
-			(
-				{
-					"timeseries": buffer,
-					"test_frequencies": test_frequencies,
-					"sample_rate": audio_context.sampleRate
-				}
-			);
-
+			
+			correlation_worker.postMessage({
+				"timeseries": buffer,
+				"test_frequencies": test_frequencies,
+				"sample_rate": sample_rate
+			});
+			
 			buffer = [];
 			setTimeout(function() { recording = true; }, 250);
 		}
-	};
-
-	script_processor.onaudioprocess = window.capture_audio;
+	}
+	
+	function fallback_to_script_processor(audio_context, microphone, buffer, sample_length_milliseconds, recording) {
+		var script_processor = audio_context.createScriptProcessor(1024, 1, 1);
+		
+		script_processor.connect(audio_context.destination);
+		microphone.connect(script_processor);
+		
+		// Need to leak this function into the global namespace so it doesn't get
+		// prematurely garbage-collected.
+		// http://lists.w3.org/Archives/Public/public-audio/2013JanMar/0304.html
+		window.capture_audio = function(event) {
+			process_audio_buffer(event.inputBuffer.getChannelData(0), audio_context.sampleRate);
+		};
+		
+		script_processor.onaudioprocess = window.capture_audio;
+		update_status("Listening for notes... (ScriptProcessorNode fallback)");
+	}
 }
 
 function interpret_correlation_result(event)
@@ -416,6 +437,9 @@ function interpret_correlation_result(event)
 			announce_to_screen_reader(announcement, "polite");
 			last_announced_note = note_name;
 			last_announced_frequency = parseFloat(frequency);
+			
+			// Reset speech pause detection when we detect a new note
+			detection_paused_for_speech = false;
 		}
 		
 		// Update confidence indicator
