@@ -262,28 +262,49 @@ function initialize()
 	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
 	// Voice announcements removed - screen readers provide sufficient accessibility
 	
+	// Test vibration immediately and show results
+	var vibration_status = document.getElementById("vibration-status");
+	console.log("Testing vibration API...");
+	
+	try {
+		if ("vibrate" in navigator) {
+			console.log("Vibration API found - testing vibration pattern...");
+			// Try a more noticeable vibration pattern
+			var test_result = navigator.vibrate([200, 100, 200]);
+			console.log("Vibration API called, result:", test_result);
+			
+			// Update status based on API availability
+			vibration_status.innerHTML = "✅ Vibration API supported (you should feel 2 buzzes)";
+			vibration_status.style.color = "green";
+			vibration_status.style.fontWeight = "bold";
+			
+			// Additional info if vibration might not work
+			setTimeout(function() {
+				var additional_info = document.createElement("span");
+				additional_info.style.fontSize = "0.8em";
+				additional_info.style.display = "block";
+				additional_info.style.marginTop = "0.3em";
+				additional_info.textContent = "Note: Some browsers/devices require user interaction first";
+				vibration_status.appendChild(additional_info);
+			}, 1000);
+			
+		} else {
+			console.log("Vibration API not found");
+			vibration_status.innerHTML = "❌ Vibration not supported on this device/browser";
+			vibration_status.style.color = "red";
+			vibration_status.style.fontWeight = "bold";
+		}
+	} catch (error) {
+		console.log("Vibration test error:", error);
+		vibration_status.innerHTML = "⚠️ Vibration error: " + error.message;
+		vibration_status.style.color = "orange";
+		vibration_status.style.fontWeight = "bold";
+	}
+	
 	// Announce that tuner is ready
 	setTimeout(function() {
 		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
-		// Test vibration to show it works
-		if ("vibrate" in navigator) {
-			console.log("Testing vibration on startup...");
-			navigator.vibrate(100);
-			console.log("Test vibration completed");
-		}
 	}, 1000);
-	
-	// Check and display vibration API support
-	var vibration_status = document.getElementById("vibration-status");
-	if ("vibrate" in navigator) {
-		console.log("Vibration API supported");
-		vibration_status.textContent = "✅ Vibration supported";
-		vibration_status.style.color = "green";
-	} else {
-		console.log("Vibration API not supported");
-		vibration_status.textContent = "❌ Vibration not supported on this device";
-		vibration_status.style.color = "orange";
-	}
 	
 	// Set git tag dynamically
 	fetch('https://api.github.com/repos/barakplasma/Accessible-guitar-tuner/git/refs/heads/master')
