@@ -1,5 +1,77 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Accessible guitar tuner for blind and visually impaired users. Provides audio pitch detection with screen reader support.">
+<title>Accessible Guitar Tuner</title>
+<style>
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.6;
+}
+h1 {
+    font-size: 3rem;
+    min-height: 1.2em;
+    margin: 20px 0;
+}
+.tuner-display {
+    background: #f5f5f5;
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 30px;
+    margin: 20px 0;
+    text-align: center;
+}
+.frequency-display {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+button {
+    font-size: 1.2rem;
+    padding: 15px 30px;
+    margin: 10px;
+    border: 2px solid #333;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+}
+button:focus {
+    outline: 3px solid #005fcc;
+    outline-offset: 2px;
+}
+button:active {
+    background: #e0e0e0;
+}
+.status-message {
+    margin: 15px 0;
+    padding: 10px;
+    border-radius: 4px;
+}
+.status-listening {
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+}
+.status-error {
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+.instructions {
+    background: #e9ecef;
+    padding: 20px;
+    border-radius: 6px;
+    margin: 20px 0;
+}
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+}
+</style>
 <script>
 // Define the set of test frequencies that we'll use to analyze microphone data.
 var C2 = 65.41; // C2 note, in Hz.
@@ -22,16 +94,45 @@ correlation_worker.addEventListener("message", interpret_correlation_result);
 
 function initialize()
 {
+	update_status("Initializing guitar tuner...");
+	
 	var get_user_media = navigator.getUserMedia;
 	get_user_media = get_user_media || navigator.webkitGetUserMedia;
 	get_user_media = get_user_media || navigator.mozGetUserMedia;
-	get_user_media.call(navigator, { "audio": true }, use_stream, function() {});
+	
+	get_user_media.call(navigator, { "audio": true }, use_stream, function(error) {
+		console.error("Microphone access denied:", error);
+		update_status("Error: Microphone access denied. Please allow microphone access to use the tuner.", "error");
+		document.getElementById("note-name").textContent = "No audio input";
+	});
 
 	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
+	
+	// Announce that tuner is ready
+	setTimeout(function() {
+		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
+	}, 1000);
+}
+
+function update_status(message, type) {
+	var status_element = document.getElementById("status-message");
+	status_element.textContent = message;
+	status_element.className = "status-message";
+	if (type === "error") {
+		status_element.classList.add("status-error");
+	} else {
+		status_element.classList.add("status-listening");
+	}
+	status_element.style.display = "block";
+	
+	// Announce to screen reader
+	announce_to_screen_reader(message, "polite");
 }
 
 function use_stream(stream)
 {
+	update_status("Listening for notes...");
+	
 	var audio_context = new AudioContext();
 	var microphone = audio_context.createMediaStreamSource(stream);
 	window.source = microphone; // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=934512
@@ -105,8 +206,23 @@ function interpret_correlation_result(event)
 	if (confidence > confidence_threshold)
 	{
 		var dominant_frequency = test_frequencies[maximum_index];
-		document.getElementById("note-name").textContent = dominant_frequency.name;
-		document.getElementById("frequency").textContent = dominant_frequency.frequency;
+		var note_name = dominant_frequency.name;
+		var frequency = dominant_frequency.frequency.toFixed(2);
+		
+		document.getElementById("note-name").textContent = note_name;
+		document.getElementById("frequency").textContent = frequency;
+		
+		// Announce to screen reader only when note changes
+		if (note_name !== last_announced_note || Math.abs(frequency - last_announced_frequency) > 0.5) {
+			var announcement = "Detected " + note_name + " at " + frequency + " Hertz";
+			announce_to_screen_reader(announcement, "polite");
+			last_announced_note = note_name;
+			last_announced_frequency = parseFloat(frequency);
+		}
+		
+		// Update confidence indicator
+		var confidence_percent = Math.min(100, Math.round((confidence - 10) / 90 * 100));
+		document.getElementById("confidence").textContent = "Confidence: " + confidence_percent + "%";
 	}
 }
 
@@ -121,27 +237,96 @@ gain_node.connect(note_context.destination);
 note_node.start();
 
 var playing = false;
+var last_announced_note = "";
+var last_announced_frequency = 0;
+
 function toggle_playing_note()
 {
 	playing = !playing;
-	if (playing)
+	if (playing) {
 		gain_node.gain.value = 0.1;
-	else
+		announce_to_screen_reader("Playing E reference note", "status");
+		document.getElementById("play-note").textContent = "Stop E reference note";
+	} else {
 		gain_node.gain.value = 0;
+		announce_to_screen_reader("Stopped E reference note", "status");
+		document.getElementById("play-note").textContent = "Play E reference note";
+	}
+}
+
+function announce_to_screen_reader(message, priority) {
+	var announcer = document.createElement("div");
+	announcer.setAttribute("role", "status");
+	announcer.setAttribute("aria-live", priority);
+	announcer.setAttribute("aria-atomic", "true");
+	announcer.className = "sr-only";
+	announcer.textContent = message;
+	document.body.appendChild(announcer);
+	setTimeout(function() {
+		document.body.removeChild(announcer);
+	}, 1000);
 }
 </script>
 </head>
 
 <body>
-<p>It sounds like you're playing...</p>
-<h1 id="note-name"></h1>
-<p>
-	<span>frequency (Hz):</span>
-	<span id="frequency"></span>
-</p>
-<hr>
-<button id="play-note">start/stop an E note</button>
-<hr>
-<a href="https://github.com/jbergknoff/guitar-tuner">Source code</a> / <a href="http://jonathan.bergknoff.com/journal/making-a-guitar-tuner-html5">Explanatory article</a>
+<main role="main">
+    <header>
+        <h1>Accessible Guitar Tuner</h1>
+    </header>
+    
+    <div class="instructions" role="region" aria-labelledby="instructions-heading">
+        <h2 id="instructions-heading">How to Use</h2>
+        <ol>
+            <li><strong>Allow microphone access</strong> when prompted</li>
+            <li><strong>Play a note</strong> on your guitar or other instrument</li>
+            <li><strong>Listen</strong> for the note name and frequency announcement</li>
+            <li><strong>Use the reference tone button</strong> to hear an E note for comparison (optional)</li>
+        </ol>
+        <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
+    </div>
+    
+    <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
+    
+    <section class="tuner-display" role="region" aria-labelledby="tuner-heading">
+        <h2 id="tuner-heading" class="sr-only">Tuner Display</h2>
+        <p>It sounds like you're playing...</p>
+        <h1 id="note-name" aria-live="polite" aria-atomic="true" tabindex="0"></h1>
+        <p class="frequency-display">
+            <span id="confidence" aria-live="polite" style="display: block; margin: 10px 0; font-size: 1rem; color: #666;"></span>
+            <span>Frequency:</span>
+            <span id="frequency" aria-live="polite" aria-atomic="true"></span>
+            <span> Hertz</span>
+        </p>
+    </section>
+    
+    <section role="region" aria-labelledby="controls-heading">
+        <h2 id="controls-heading" class="sr-only">Controls</h2>
+        <button id="play-note" aria-pressed="false" aria-describedby="play-note-description">
+            Play E reference note
+        </button>
+        <p id="play-note-description" class="sr-only">Click to start or stop a reference E note at 82.41 Hertz</p>
+    </section>
+    
+    <nav role="navigation" aria-labelledby="links-heading">
+        <h2 id="links-heading" class="sr-only">Related Links</h2>
+        <a href="https://github.com/jbergknoff/guitar-tuner">Source code</a> / 
+        <a href="http://jonathan.bergknoff.com/journal/making-a-guitar-tuner-html5">Explanatory article</a>
+    </nav>
+</main>
+
+<style>
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+</style>
 </body>
 </html>
