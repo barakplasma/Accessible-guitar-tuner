@@ -259,8 +259,7 @@ function initialize()
 		document.getElementById("note-name").textContent = "No audio input";
 	});
 
-	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
-	// Voice announcements removed - screen readers provide sufficient accessibility
+	// Reference note feature removed - screen readers provide sufficient accessibility
 	
 	// Test vibration immediately and show results
 	var vibration_status = document.getElementById("vibration-status");
@@ -466,12 +465,6 @@ var gain_node = null;
 var playing = false;
 var last_announced_note = "";
 var last_announced_frequency = 0;
-
-function toggle_playing_note()
-{
-	// Reference note feature removed - not essential for core functionality
-	announce_to_screen_reader("Reference note feature removed", "status");
-}
 
 function announce_to_screen_reader(message, priority) {
 	// Screen reader announcement
