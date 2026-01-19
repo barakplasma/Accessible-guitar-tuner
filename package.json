@@ -1,0 +1,26 @@
+{
+  "name": "accessible-guitar-tuner",
+  "version": "1.0.0",
+  "description": "This is a simple guitar tuner made with the web audio API.",
+  "main": "correlation_worker.js",
+  "scripts": {
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/barakplasma/Accessible-guitar-tuner.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/barakplasma/Accessible-guitar-tuner/issues"
+  },
+  "homepage": "https://github.com/barakplasma/Accessible-guitar-tuner#readme",
+  "devDependencies": {
+    "vitest": "^4.0.17"
+  }
+}
