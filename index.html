@@ -259,15 +259,7 @@ function initialize()
 	});
 
 	document.getElementById("play-note").addEventListener("click", toggle_playing_note);
-	document.getElementById("toggle-tts").addEventListener("click", toggle_text_to_speech);
-	
-	// Load voices for text-to-speech
-	if (speech_synthesis) {
-		speech_synthesis.getVoices();
-		speech_synthesis.onvoiceschanged = function() {
-			speech_synthesis.getVoices();
-		};
-	}
+	// Voice announcements removed - screen readers provide sufficient accessibility
 	
 	// Announce that tuner is ready
 	setTimeout(function() {
@@ -332,21 +324,7 @@ function use_stream(stream)
 	// http://lists.w3.org/Archives/Public/public-audio/2013JanMar/0304.html
 	window.capture_audio = function(event)
 	{
-		// Pause detection while speech synthesis is speaking
-		if (is_speaking) {
-			if (!detection_paused_for_speech) {
-				detection_paused_for_speech = true;
-				update_status("Pausing detection for voice announcement...");
-			}
-			return;
-		}
-		
-		// Resume detection when speech finishes
-		if (detection_paused_for_speech) {
-			detection_paused_for_speech = false;
-			update_status("Listening for notes...");
-		}
-		
+			
 		if (!recording)
 			return;
 
@@ -421,12 +399,12 @@ function interpret_correlation_result(event)
 		var confidence_percent = Math.min(100, Math.round((confidence - 10) / 90 * 100));
 		document.getElementById("confidence").textContent = "Confidence: " + confidence_percent + "%";
 		
-		// Check if note is perfectly in tune and vibrate for success
-		var is_perfect_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
-		                      dominant_frequency.name.indexOf('flat') === -1 &&
-		                      confidence_percent > 70;
+		// Vibrate when note is in tune with good confidence
+		var is_in_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
+		                     dominant_frequency.name.indexOf('flat') === -1 &&
+		                     confidence_percent > 30;
 		
-		if (is_perfect_tune && note_name !== last_announced_note) {
+		if (is_in_tune) {
 			vibrate_for_success();
 		}
 	}
@@ -440,53 +418,11 @@ var gain_node = null;
 var playing = false;
 var last_announced_note = "";
 var last_announced_frequency = 0;
-var use_text_to_speech = false;
-var speech_synthesis = window.speechSynthesis;
-var last_spoken_text = "";
-var last_speak_time = 0;
-var is_speaking = false;
-var detection_paused_for_speech = false;
 
 function toggle_playing_note()
 {
-	// Initialize audio context on first user interaction
-	if (!note_context) {
-		try {
-			note_context = new (window.AudioContext || window.webkitAudioContext)();
-			note_node = note_context.createOscillator();
-			gain_node = note_context.createGain();
-			note_node.frequency.value = C2 * Math.pow(2, 4 / 12); // E, ~82.41 Hz.
-			note_node.connect(gain_node);
-			gain_node.connect(note_context.destination);
-			note_node.start();
-		} catch (error) {
-			console.error("Error initializing reference note:", error);
-			announce_to_screen_reader("Error: Could not initialize reference note", "assertive");
-			return;
-		}
-	}
-	
-	// Resume audio context if suspended (required by some browsers)
-	if (note_context.state === 'suspended') {
-		note_context.resume().catch(function(error) {
-			console.error("Error resuming audio context:", error);
-			announce_to_screen_reader("Error: Could not play reference note", "assertive");
-		});
-	}
-	
-	playing = !playing;
-	if (playing) {
-		gain_node.gain.setValueAtTime(0, note_context.currentTime);
-		gain_node.gain.linearRampToValueAtTime(0.1, note_context.currentTime + 0.01);
-		announce_to_screen_reader("Playing E reference note", "status");
-		document.getElementById("play-note").textContent = "Stop E reference note";
-		document.getElementById("play-note").setAttribute("aria-pressed", "true");
-	} else {
-		gain_node.gain.linearRampToValueAtTime(0, note_context.currentTime + 0.01);
-		announce_to_screen_reader("Stopped E reference note", "status");
-		document.getElementById("play-note").textContent = "Play E reference note";
-		document.getElementById("play-note").setAttribute("aria-pressed", "false");
-	}
+	// Reference note feature removed - not essential for core functionality
+	announce_to_screen_reader("Reference note feature removed", "status");
 }
 
 function announce_to_screen_reader(message, priority) {
@@ -503,88 +439,23 @@ function announce_to_screen_reader(message, priority) {
 			document.body.removeChild(announcer);
 		}
 	}, 1000);
-	
-	// Text-to-speech announcement (if enabled)
-	if (use_text_to_speech && speech_synthesis) {
-		speak_text(message);
-	}
-}
-
-function speak_text(text) {
-	// Prevent too frequent repetitions
-	var now = Date.now();
-	if (text === last_spoken_text && now - last_speak_time < 2000) {
-		return; // Don't repeat same text within 2 seconds
-	}
-	
-	// Cancel any ongoing speech
-	speech_synthesis.cancel();
-	
-	var utterance = new SpeechSynthesisUtterance(text);
-	utterance.rate = 1.0;
-	utterance.pitch = 1.0;
-	utterance.volume = 0.8;
-	
-	// Try to get a good voice
-	var voices = speech_synthesis.getVoices();
-	if (voices.length > 0) {
-		// Prefer English voices
-		var english_voice = voices.find(function(voice) {
-			return voice.lang.startsWith('en');
-		});
-		if (english_voice) {
-			utterance.voice = english_voice;
-		}
-	}
-	
-	utterance.onstart = function() {
-		is_speaking = true;
-		last_spoken_text = text;
-		last_speak_time = now;
-	};
-	
-	utterance.onend = function() {
-		is_speaking = false;
-		detection_paused_for_speech = false;
-	};
-	
-	utterance.onerror = function() {
-		is_speaking = false;
-		detection_paused_for_speech = false;
-	};
-	
-	speech_synthesis.speak(utterance);
 }
 
 function vibrate_for_success() {
 	if ("vibrate" in navigator) {
-		// Vibrate pattern: short burst, pause, short burst (success confirmation)
-		navigator.vibrate([100, 50, 100]);
+		console.log("Vibrating for in-tune note");
+		try {
+			// Vibrate pattern: short burst for immediate feedback
+			var result = navigator.vibrate(200);
+			console.log("Vibration result:", result);
+		} catch (error) {
+			console.log("Vibration error:", error);
+		}
+	} else {
+		console.log("Vibration not supported on this device");
 	}
 }
 
-function toggle_text_to_speech() {
-	use_text_to_speech = !use_text_to_speech;
-	var toggle_button = document.getElementById("toggle-tts");
-	
-	if (use_text_to_speech) {
-		if (speech_synthesis) {
-			// Load voices
-			speech_synthesis.getVoices();
-			toggle_button.textContent = "Disable Voice Announcements";
-			toggle_button.setAttribute("aria-pressed", "true");
-			announce_to_screen_reader("Voice announcements enabled", "polite");
-		} else {
-			alert("Text-to-speech is not supported in your browser");
-			use_text_to_speech = false;
-		}
-	} else {
-		toggle_button.textContent = "Enable Voice Announcements";
-		toggle_button.setAttribute("aria-pressed", "false");
-		speech_synthesis.cancel();
-		announce_to_screen_reader("Voice announcements disabled", "polite");
-	}
-}
 </script>
 </head>
 
@@ -601,12 +472,9 @@ function toggle_text_to_speech() {
             <li><strong>Play a note</strong> on your guitar or other instrument</li>
             <li><strong>Listen</strong> for the note name and frequency announcement</li>
             <li><strong>Feel the vibration</strong> when your note is perfectly in tune (on supported devices)</li>
-            <li><strong>Use the reference tone button</strong> to hear an E note for comparison (optional)</li>
-            <li><strong>Enable voice announcements</strong> if you don't have a screen reader (optional)</li>
         </ol>
         <p><strong>For screen reader users:</strong> This tuner will automatically announce detected notes. Make sure your screen reader is running and note announcements are enabled.</p>
-        <p><strong>For users without screen readers:</strong> Click "Enable Voice Announcements" to hear note names spoken aloud using text-to-speech.</p>
-        <p><strong>Vibration feedback:</strong> When you play a note that's perfectly in tune, your device will vibrate (if supported). Voice announcements automatically pause while speaking to avoid interference.</p>
+        <p><strong>Vibration feedback:</strong> When you play a note that's in tune, your device will vibrate (if supported).</p>
     </div>
     
     <div id="status-message" class="status-message" role="status" aria-live="polite" aria-atomic="true" style="display: none;"></div>
@@ -632,15 +500,6 @@ function toggle_text_to_speech() {
     <section role="region" aria-labelledby="controls-heading">
         <h2 id="controls-heading" class="sr-only">Controls</h2>
         <div class="grid">
-            <button id="play-note" class="button" role="switch" aria-pressed="false" aria-describedby="play-note-description">
-                Play E reference note
-            </button>
-            <button id="toggle-tts" class="button" role="switch" aria-pressed="false" aria-describedby="tts-description">
-                Enable Voice Announcements
-            </button>
-        </div>
-        <p id="play-note-description" class="sr-only">Click to start or stop a reference E note at 82.41 Hertz</p>
-        <p id="tts-description" class="sr-only">Toggle voice announcements for detected notes and status updates (alternative to screen reader)</p>
     </section>
     
     <nav role="navigation" aria-labelledby="links-heading">
