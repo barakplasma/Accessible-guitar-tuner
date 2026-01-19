@@ -225,112 +225,202 @@ nav a:hover {
 }
 </style>
 <script>
-// Define the set of test frequencies that we'll use to analyze microphone data.
-var C2 = 65.41; // C2 note, in Hz.
-var notes = [ "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" ];
-var test_frequencies = [];
-for (var i = 0; i < 30; i++)
-{
-	var note_frequency = C2 * Math.pow(2, i / 12);
-	var note_name = notes[i % 12];
-	var note = { "frequency": note_frequency, "name": note_name };
-	var just_above = { "frequency": note_frequency * Math.pow(2, 1 / 48), "name": note_name + " (a bit sharp)" };
-	var just_below = { "frequency": note_frequency * Math.pow(2, -1 / 48), "name": note_name + " (a bit flat)" };
-	test_frequencies = test_frequencies.concat([ just_below, note, just_above ]);
-}
+/**
+ * Accessible Guitar Tuner - Main Application Script
+ *
+ * An accessible, browser-based guitar tuner using the Web Audio API
+ * for pitch detection with comprehensive screen reader support.
+ *
+ * @author Accessible Guitar Tuner Team
+ * @version 1.0.0
+ * @license MIT
+ */
 
-window.addEventListener("load", initialize);
+// ============================================================================
+// CONSTANTS AND CONFIGURATION
+// ============================================================================
 
-var correlation_worker = new Worker("correlation_worker.js");
-correlation_worker.addEventListener("message", interpret_correlation_result);
+/** @constant {number} C2_FREQUENCY - Frequency of C2 note in Hz (base for octave calculations) */
+const C2_FREQUENCY = 65.41;
 
-function initialize()
-{
+/** @constant {string[]} NOTE_NAMES - Array of musical note names in ascending order */
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+
+/** @constant {number} OCTAVES_TO_TEST - Number of octaves to generate test frequencies for */
+const OCTAVES_TO_TEST = 30;
+
+/** @constant {number} CONFIDENCE_THRESHOLD - Minimum confidence ratio for valid note detection */
+const CONFIDENCE_THRESHOLD = 10;
+
+/** @constant {number} VIBRATION_CONFIDENCE_PERCENT - Minimum confidence % to trigger vibration feedback */
+const VIBRATION_CONFIDENCE_PERCENT = 20;
+
+/** @constant {object} VIBRATION_PATTERNS - Vibration patterns for different feedback types */
+const VIBRATION_PATTERNS = {
+	/** Startup test pattern - two strong buzzes */
+	STARTUP_TEST: [200, 100, 200],
+	/** Success pattern - single buzz when note is in tune */
+	SUCCESS: 200
+};
+
+// ============================================================================
+// GLOBAL STATE
+// ============================================================================
+
+/** @type {Array} Test frequencies for pitch detection - generated on initialization */
+let test_frequencies = [];
+
+/** @type {string} Last announced note name (for change detection) */
+let last_announced_note = "";
+
+/** @type {number} Last announced frequency value (for change detection) */
+let last_announced_frequency = 0;
+
+/** @type {Worker} Web Worker for correlation calculations */
+let correlation_worker = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+/**
+ * Initialize the guitar tuner application.
+ * Sets up test frequencies, initializes microphone access, tests device capabilities,
+ * and sets up event listeners.
+ *
+ * @function initialize
+ * @returns {void}
+ */
+function initialize() {
 	update_status("Initializing guitar tuner...");
-	
-	var get_user_media = navigator.getUserMedia;
-	get_user_media = get_user_media || navigator.webkitGetUserMedia;
-	get_user_media = get_user_media || navigator.mozGetUserMedia;
-	
-	get_user_media.call(navigator, { "audio": true }, use_stream, function(error) {
-		console.error("Microphone access denied:", error);
-		update_audio_status("❌ Microphone access denied");
-		update_status("Error: Microphone access denied. Please allow microphone access to use the tuner.", "error");
-		var note_element = document.getElementById("note-name");
-		if (note_element) {
-			note_element.textContent = "No audio input";
-		}
-	});
 
-	// Reference note feature removed - screen readers provide sufficient accessibility
-	
-	// Test vibration immediately and show results
-	var vibration_status = document.getElementById("vibration-status");
-	console.log("Testing vibration API...");
-	
-	try {
-		if ("vibrate" in navigator) {
-			console.log("Vibration API found - testing vibration pattern...");
-			// Try a more noticeable vibration pattern
-			var test_result = navigator.vibrate([200, 100, 200]);
-			console.log("Vibration API called, result:", test_result);
-			
-			// Update status based on API availability
-			vibration_status.innerHTML = "✅ Vibration API supported (you should feel 2 buzzes)";
-			vibration_status.style.color = "green";
-			vibration_status.style.fontWeight = "bold";
-			
-			// Additional info if vibration might not work
-			setTimeout(function() {
-				var additional_info = document.createElement("span");
-				additional_info.style.fontSize = "0.8em";
-				additional_info.style.display = "block";
-				additional_info.style.marginTop = "0.3em";
-				additional_info.textContent = "Note: Some browsers/devices require user interaction first";
-				vibration_status.appendChild(additional_info);
-			}, 1000);
-			
-		} else {
-			console.log("Vibration API not found");
-			vibration_status.innerHTML = "❌ Vibration not supported on this device/browser";
-			vibration_status.style.color = "red";
-			vibration_status.style.fontWeight = "bold";
-		}
-	} catch (error) {
-		console.log("Vibration test error:", error);
-		vibration_status.innerHTML = "⚠️ Vibration error: " + error.message;
-		vibration_status.style.color = "orange";
-		vibration_status.style.fontWeight = "bold";
-	}
-	
-	// Announce that tuner is ready
-	setTimeout(function() {
+	// Generate test frequencies for pitch detection
+	generateTestFrequencies();
+
+	// Initialize Web Worker for correlation calculations
+	initializeCorrelationWorker();
+
+	// Request microphone access
+	requestMicrophoneAccess();
+
+	// Test device vibration capability
+	testVibrationCapability();
+
+	// Announce readiness after initialization
+	setTimeout(() => {
 		announce_to_screen_reader("Guitar tuner ready. Play a note to begin tuning.", "polite");
 	}, 1000);
-	
-	// Set git tag dynamically
-	fetch('https://api.github.com/repos/barakplasma/Accessible-guitar-tuner/git/refs/heads/master')
-		.then(function(response) {
-			return response.json();
-		})
-		.then(function(data) {
-			var shortSha = data.object.sha.substring(0, 7);
-			document.getElementById('git-tag').textContent = shortSha;
-			document.getElementById('git-tag').title = 'Full SHA: ' + data.object.sha;
-		})
-		.catch(function(error) {
-			console.log('Could not fetch git tag:', error);
-		});
+
+	// Fetch and display git version information
+	fetchGitVersion();
 }
 
+/**
+ * Generate test frequencies for pitch detection.
+ * Creates 90 test frequencies (30 notes × 3 variations each: flat, in-tune, sharp)
+ * starting from C2 (65.41 Hz).
+ *
+ * @function generateTestFrequencies
+ * @returns {void}
+ * @private
+ */
+function generateTestFrequencies() {
+	for (let i = 0; i < OCTAVES_TO_TEST; i++) {
+		const note_frequency = C2_FREQUENCY * Math.pow(2, i / 12);
+		const note_name = NOTE_NAMES[i % 12];
+
+		// Create three variations for each note: flat, in-tune, sharp
+		const note = {
+			frequency: note_frequency,
+			name: note_name
+		};
+
+		const just_above = {
+			frequency: note_frequency * Math.pow(2, 1 / 48),
+			name: note_name + " (a bit sharp)"
+		};
+
+		const just_below = {
+			frequency: note_frequency * Math.pow(2, -1 / 48),
+			name: note_name + " (a bit flat)"
+		};
+
+		test_frequencies = test_frequencies.concat([just_below, note, just_above]);
+	}
+}
+
+/**
+ * Initialize the Web Worker for correlation calculations.
+ * The worker handles the computationally intensive pitch detection algorithm.
+ *
+ * @function initializeCorrelationWorker
+ * @returns {void}
+ * @private
+ */
+function initializeCorrelationWorker() {
+	correlation_worker = new Worker("correlation_worker.js");
+	correlation_worker.addEventListener("message", interpret_correlation_result);
+}
+
+/**
+ * Request microphone access from the user.
+ * Uses browser-specific getUserMedia implementations for cross-browser compatibility.
+ *
+ * @function requestMicrophoneAccess
+ * @returns {void}
+ * @private
+ */
+function requestMicrophoneAccess() {
+	// Handle browser-specific getUserMedia implementations
+	const get_user_media = navigator.getUserMedia ||
+		navigator.webkitGetUserMedia ||
+		navigator.mozGetUserMedia;
+
+	get_user_media.call(navigator, { "audio": true }, use_stream, handleMicrophoneError);
+}
+
+/**
+ * Handle microphone access errors.
+ * Updates the UI to inform the user of the error and provides guidance.
+ *
+ * @function handleMicrophoneError
+ * @param {Error} error - The error object from getUserMedia
+ * @returns {void}
+ * @private
+ */
+function handleMicrophoneError(error) {
+	console.error("Microphone access denied:", error);
+	update_audio_status("❌ Microphone access denied");
+	update_status("Error: Microphone access denied. Please allow microphone access to use the tuner.", "error");
+
+	const note_element = document.getElementById("note-name");
+	if (note_element) {
+		note_element.textContent = "No audio input";
+	}
+}
+
+// ============================================================================
+// UI UPDATE FUNCTIONS
+// ============================================================================
+
+/**
+ * Update the audio/microphone status display.
+ * Changes text color based on status type (success/error/neutral).
+ *
+ * @function update_audio_status
+ * @param {string} status - Status message to display
+ * @returns {void}
+ */
 function update_audio_status(status) {
-	var audio_status_element = document.getElementById("audio-status");
+	const audio_status_element = document.getElementById("audio-status");
 	if (!audio_status_element) {
 		console.warn("audio-status element not found");
 		return;
 	}
+
 	audio_status_element.textContent = status;
-	
+
+	// Set color based on status type
 	if (status.includes("✅")) {
 		audio_status_element.style.color = "green";
 	} else if (status.includes("❌")) {
@@ -340,178 +430,423 @@ function update_audio_status(status) {
 	}
 }
 
+/**
+ * Update the main status message display.
+ * Handles both error and informational messages with appropriate styling.
+ *
+ * @function update_status
+ * @param {string} message - Status message to display
+ * @param {string} [type="info"] - Message type: "error" or "info"
+ * @returns {void}
+ */
 function update_status(message, type) {
-	var status_element = document.getElementById("status-message");
+	const status_element = document.getElementById("status-message");
 	if (!status_element) {
 		console.warn("status-message element not found");
 		return;
 	}
+
 	status_element.textContent = message;
 	status_element.className = "status-message";
+
 	if (type === "error") {
 		status_element.classList.add("status-error");
 	} else {
 		status_element.classList.add("status-listening");
 	}
+
 	status_element.style.display = "block";
-	
-	// Announce to screen reader
+
+	// Announce to screen reader for accessibility
 	announce_to_screen_reader(message, "polite");
 }
 
-function use_stream(stream)
-{
+// ============================================================================
+// AUDIO PROCESSING
+// ============================================================================
+
+/**
+ * Handle successful microphone stream acquisition.
+ * Sets up the audio context and processing pipeline for pitch detection.
+ *
+ * @function use_stream
+ * @param {MediaStream} stream - The audio stream from getUserMedia
+ * @returns {void}
+ */
+function use_stream(stream) {
 	update_audio_status("✅ Microphone connected");
 	update_status("Listening for notes...");
-	
-	var audio_context = new AudioContext();
-	var microphone = audio_context.createMediaStreamSource(stream);
-	window.source = microphone; // Workaround for https://bugzilla.mozilla.org/show_bug.cgi?id=934512
-	var script_processor = audio_context.createScriptProcessor(1024, 1, 1);
 
+	// Create audio context and processing chain
+	const audio_context = new AudioContext();
+	const microphone = audio_context.createMediaStreamSource(stream);
+
+	// Store microphone globally to prevent garbage collection
+	// Workaround for Firefox bug: https://bugzilla.mozilla.org/show_bug.cgi?id=934512
+	window.source = microphone;
+
+	const script_processor = audio_context.createScriptProcessor(1024, 1, 1);
+
+	// Connect audio processing pipeline
 	script_processor.connect(audio_context.destination);
 	microphone.connect(script_processor);
 
-	var buffer = [];
-	var sample_length_milliseconds = 100;
-	var recording = true;
+	// Audio capture state
+	const buffer = [];
+	const sample_length_milliseconds = 100;
+	let recording = true;
 
-	// Need to leak this function into the global namespace so it doesn't get
-	// prematurely garbage-collected.
-	// http://lists.w3.org/Archives/Public/public-audio/2013JanMar/0304.html
-	window.capture_audio = function(event)
-	{
-			
-		if (!recording)
-			return;
+	/**
+	 * Capture and process audio samples.
+	 * Collects audio data and sends it to the Web Worker for pitch detection.
+	 *
+	 * @param {AudioProcessingEvent} event - Audio processing event from ScriptProcessor
+	 */
+	window.capture_audio = function(event) {
+		if (!recording) return;
 
-		buffer = buffer.concat(Array.prototype.slice.call(event.inputBuffer.getChannelData(0)));
+		// Collect audio samples
+		const audio_data = event.inputBuffer.getChannelData(0);
+		buffer.push(...Array.from(audio_data));
 
-		// Stop recording after sample_length_milliseconds.
-		if (buffer.length > sample_length_milliseconds * audio_context.sampleRate / 1000)
-		{
+		// Process when we have enough samples
+		if (buffer.length > sample_length_milliseconds * audio_context.sampleRate / 1000) {
 			recording = false;
 
-			correlation_worker.postMessage
-			(
-				{
-					"timeseries": buffer,
-					"test_frequencies": test_frequencies,
-					"sample_rate": audio_context.sampleRate
-				}
-			);
+			// Send data to Web Worker for correlation analysis
+			correlation_worker.postMessage({
+				timeseries: buffer,
+				test_frequencies: test_frequencies,
+				sample_rate: audio_context.sampleRate
+			});
 
-			buffer = [];
-			setTimeout(function() { recording = true; }, 250);
+			// Reset buffer and resume recording
+			buffer.length = 0;
+			setTimeout(() => { recording = true; }, 250);
 		}
 	};
 
 	script_processor.onaudioprocess = window.capture_audio;
 }
 
-function interpret_correlation_result(event)
-{
-	var timeseries = event.data.timeseries;
-	var frequency_amplitudes = event.data.frequency_amplitudes;
+// ============================================================================
+// PITCH DETECTION
+// ============================================================================
 
-	// Compute the (squared) magnitudes of the complex amplitudes for each
-	// test frequency.
-	var magnitudes = frequency_amplitudes.map(function(z) { return z[0] * z[0] + z[1] * z[1]; });
+/**
+ * Interpret correlation results from the Web Worker.
+ * Analyzes frequency amplitudes to identify the detected note and updates the UI.
+ *
+ * @function interpret_correlation_result
+ * @param {MessageEvent} event - Message event containing correlation data
+ * @param {Array} event.data.timeseries - Audio time series data
+ * @param {Array} event.data.frequency_amplitudes - Complex amplitudes for each test frequency
+ * @returns {void}
+ */
+function interpret_correlation_result(event) {
+	const frequency_amplitudes = event.data.frequency_amplitudes;
 
-	// Find the maximum in the list of magnitudes.
-	var maximum_index = -1;
-	var maximum_magnitude = 0;
-	for (var i = 0; i < magnitudes.length; i++)
-	{
-		if (magnitudes[i] <= maximum_magnitude)
-			continue;
+	// Calculate magnitudes from complex amplitudes
+	const magnitudes = frequency_amplitudes.map(z => z[0] * z[0] + z[1] * z[1]);
+
+	// Find dominant frequency
+	const { maximum_index, maximum_magnitude } = findMaximumMagnitude(magnitudes);
+
+	// Calculate confidence ratio
+	const average = magnitudes.reduce((a, b) => a + b, 0) / magnitudes.length;
+	const confidence = maximum_magnitude / average;
+
+	// Process only if confidence exceeds threshold
+	if (confidence > CONFIDENCE_THRESHOLD) {
+		const dominant_frequency = test_frequencies[maximum_index];
+		processDetectedNote(dominant_frequency, confidence);
+	}
+}
+
+/**
+ * Find the maximum magnitude and its index from an array.
+ *
+ * @function findMaximumMagnitude
+ * @param {number[]} magnitudes - Array of magnitude values
+ * @returns {{maximum_index: number, maximum_magnitude: number}} Index and value of maximum
+ * @private
+ */
+function findMaximumMagnitude(magnitudes) {
+	let maximum_index = -1;
+	let maximum_magnitude = 0;
+
+	for (let i = 0; i < magnitudes.length; i++) {
+		if (magnitudes[i] <= maximum_magnitude) continue;
 
 		maximum_index = i;
 		maximum_magnitude = magnitudes[i];
 	}
 
-	// Compute the average magnitude. We'll only pay attention to frequencies
-	// with magnitudes significantly above average.
-	var average = magnitudes.reduce(function(a, b) { return a + b; }, 0) / magnitudes.length;
-	var confidence = maximum_magnitude / average;
-	var confidence_threshold = 10; // empirical, arbitrary.
-	if (confidence > confidence_threshold)
-	{
-		var dominant_frequency = test_frequencies[maximum_index];
-		var note_name = dominant_frequency.name;
-		var frequency = dominant_frequency.frequency.toFixed(2);
-		
-		var note_element = document.getElementById("note-name");
-		var frequency_element = document.getElementById("frequency");
-		if (note_element) {
-			note_element.textContent = note_name;
-		}
-		if (frequency_element) {
-			frequency_element.textContent = frequency;
-		}
-		
-		// Announce to screen reader only when note changes
-		if (note_name !== last_announced_note || Math.abs(parseFloat(frequency) - last_announced_frequency) > 0.5) {
-			var announcement = "Detected " + note_name + " at " + frequency + " Hertz";
-			announce_to_screen_reader(announcement, "polite");
-			last_announced_note = note_name;
-			last_announced_frequency = parseFloat(frequency);
-		}
-		
-		// Update confidence indicator
-		var confidence_percent = Math.min(100, Math.round((confidence - 10) / 90 * 100));
-		var confidence_element = document.getElementById("confidence");
-		if (confidence_element) {
-			confidence_element.textContent = "Confidence: " + confidence_percent + "%";
-		}
-		
-		// Vibrate when note is in tune with good confidence
-		var is_in_tune = dominant_frequency.name.indexOf('sharp') === -1 && 
-		                     dominant_frequency.name.indexOf('flat') === -1 &&
-		                     confidence_percent > 20;
-		
-		if (is_in_tune) {
-			console.log("Note in tune! Confidence:", confidence_percent, "%");
-			vibrate_for_success();
-		}
+	return { maximum_index, maximum_magnitude };
+}
+
+/**
+ * Process a detected note and update the UI accordingly.
+ * Handles display updates, screen reader announcements, and vibration feedback.
+ *
+ * @function processDetectedNote
+ * @param {{frequency: number, name: string}} dominant_frequency - Detected frequency data
+ * @param {number} confidence - Confidence ratio of the detection
+ * @returns {void}
+ * @private
+ */
+function processDetectedNote(dominant_frequency, confidence) {
+	const note_name = dominant_frequency.name;
+	const frequency = dominant_frequency.frequency.toFixed(2);
+
+	// Update note display
+	updateNoteDisplay(note_name, frequency);
+
+	// Announce note change to screen reader
+	announceNoteChange(note_name, frequency);
+
+	// Update confidence display
+	updateConfidenceDisplay(confidence);
+
+	// Provide vibration feedback if note is in tune
+	provideVibrationFeedback(dominant_frequency, confidence);
+}
+
+/**
+ * Update the note display in the UI.
+ *
+ * @function updateNoteDisplay
+ * @param {string} note_name - Name of the detected note
+ * @param {string} frequency - Frequency value in Hz
+ * @returns {void}
+ * @private
+ */
+function updateNoteDisplay(note_name, frequency) {
+	const note_element = document.getElementById("note-name");
+	const frequency_element = document.getElementById("frequency");
+
+	if (note_element) {
+		note_element.textContent = note_name;
+	}
+
+	if (frequency_element) {
+		frequency_element.textContent = frequency;
 	}
 }
 
-var last_announced_note = "";
-var last_announced_frequency = 0;
+/**
+ * Announce note changes to screen reader only when significant changes occur.
+ * Prevents excessive announcements for minor frequency fluctuations.
+ *
+ * @function announceNoteChange
+ * @param {string} note_name - Current note name
+ * @param {string} frequency - Current frequency value
+ * @returns {void}
+ * @private
+ */
+function announceNoteChange(note_name, frequency) {
+	const frequency_num = parseFloat(frequency);
 
+	if (note_name !== last_announced_note ||
+		Math.abs(frequency_num - last_announced_frequency) > 0.5) {
+
+		const announcement = `Detected ${note_name} at ${frequency} Hertz`;
+		announce_to_screen_reader(announcement, "polite");
+
+		last_announced_note = note_name;
+		last_announced_frequency = frequency_num;
+	}
+}
+
+/**
+ * Update the confidence display in the UI.
+ *
+ * @function updateConfidenceDisplay
+ * @param {number} confidence - Raw confidence ratio
+ * @returns {void}
+ * @private
+ */
+function updateConfidenceDisplay(confidence) {
+	const confidence_percent = Math.min(100, Math.round((confidence - CONFIDENCE_THRESHOLD) / 90 * 100));
+	const confidence_element = document.getElementById("confidence");
+
+	if (confidence_element) {
+		confidence_element.textContent = `Confidence: ${confidence_percent}%`;
+	}
+}
+
+/**
+ * Provide vibration feedback when a note is detected as in tune.
+ * Only vibrates for exact notes (not sharp/flat) with sufficient confidence.
+ *
+ * @function provideVibrationFeedback
+ * @param {{frequency: number, name: string}} dominant_frequency - Detected frequency data
+ * @param {number} confidence - Detection confidence ratio
+ * @returns {void}
+ * @private
+ */
+function provideVibrationFeedback(dominant_frequency, confidence) {
+	const confidence_percent = Math.min(100, Math.round((confidence - CONFIDENCE_THRESHOLD) / 90 * 100));
+
+	const is_in_tune = dominant_frequency.name.indexOf('sharp') === -1 &&
+		dominant_frequency.name.indexOf('flat') === -1 &&
+		confidence_percent > VIBRATION_CONFIDENCE_PERCENT;
+
+	if (is_in_tune) {
+		console.log("Note in tune! Confidence:", confidence_percent, "%");
+		vibrate_for_success();
+	}
+}
+
+// ============================================================================
+// ACCESSIBILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Announce a message to screen readers using ARIA live regions.
+ * Creates a temporary element that's announced and then removed.
+ *
+ * @function announce_to_screen_reader
+ * @param {string} message - Message to announce to screen reader users
+ * @param {string} [priority="polite"] - ARIA live priority: "polite", "assertive", or "off"
+ * @returns {void}
+ */
 function announce_to_screen_reader(message, priority) {
-	// Screen reader announcement
-	var announcer = document.createElement("div");
+	// Create announcement element with proper ARIA attributes
+	const announcer = document.createElement("div");
 	announcer.setAttribute("role", "status");
-	announcer.setAttribute("aria-live", priority);
+	announcer.setAttribute("aria-live", priority || "polite");
 	announcer.setAttribute("aria-atomic", "true");
 	announcer.className = "sr-only";
 	announcer.textContent = message;
+
+	// Add to DOM, then remove after announcement
 	document.body.appendChild(announcer);
-	setTimeout(function() {
+
+	// Remove element after announcement delay (1 second is standard for screen readers)
+	setTimeout(() => {
 		if (document.body.contains(announcer)) {
 			document.body.removeChild(announcer);
 		}
 	}, 1000);
 }
 
-function vibrate_for_success() {
-	if ("vibrate" in navigator) {
-		console.log("Vibrating for in-tune note");
-		try {
-			// Vibrate pattern: short burst for immediate feedback
-			var result = navigator.vibrate(200);
-			console.log("Vibration result:", result);
-		} catch (error) {
-			console.log("Vibration error:", error);
+// ============================================================================
+// VIBRATION FEEDBACK
+// ============================================================================
+
+/**
+ * Test device vibration capability and update the UI accordingly.
+ * Performs a test vibration pattern and displays the results to the user.
+ *
+ * @function testVibrationCapability
+ * @returns {void}
+ * @private
+ */
+function testVibrationCapability() {
+	const vibration_status = document.getElementById("vibration-status");
+	if (!vibration_status) {
+		console.warn("vibration-status element not found");
+		return;
+	}
+
+	console.log("Testing vibration API...");
+
+	try {
+		if ("vibrate" in navigator) {
+			console.log("Vibration API found - testing vibration pattern...");
+
+			// Perform test vibration
+			const test_result = navigator.vibrate(VIBRATION_PATTERNS.STARTUP_TEST);
+			console.log("Vibration API called, result:", test_result);
+
+			// Update UI to show API is supported
+			vibration_status.innerHTML = "✅ Vibration API supported (you should feel 2 buzzes)";
+			vibration_status.style.color = "green";
+			vibration_status.style.fontWeight = "bold";
+
+			// Add additional information after a delay
+			setTimeout(() => {
+				const additional_info = document.createElement("span");
+				additional_info.style.fontSize = "0.8em";
+				additional_info.style.display = "block";
+				additional_info.style.marginTop = "0.3em";
+				additional_info.textContent = "Note: Some browsers/devices require user interaction first";
+				vibration_status.appendChild(additional_info);
+			}, 1000);
+
+		} else {
+			console.log("Vibration API not found");
+			vibration_status.innerHTML = "❌ Vibration not supported on this device/browser";
+			vibration_status.style.color = "red";
+			vibration_status.style.fontWeight = "bold";
 		}
-	} else {
-		console.log("Vibration not supported on this device");
+	} catch (error) {
+		console.log("Vibration test error:", error);
+		vibration_status.innerHTML = `⚠️ Vibration error: ${error.message}`;
+		vibration_status.style.color = "orange";
+		vibration_status.style.fontWeight = "bold";
 	}
 }
 
-</script>
+/**
+ * Provide vibration feedback when a note is detected as perfectly in tune.
+ * Uses a short vibration burst to give immediate tactile feedback.
+ *
+ * @function vibrate_for_success
+ * @returns {void}
+ */
+function vibrate_for_success() {
+	if (!("vibrate" in navigator)) {
+		console.log("Vibration not supported on this device");
+		return;
+	}
+
+	console.log("Vibrating for in-tune note");
+
+	try {
+		const result = navigator.vibrate(VIBRATION_PATTERNS.SUCCESS);
+		console.log("Vibration result:", result);
+	} catch (error) {
+		console.log("Vibration error:", error);
+	}
+}
+
+// ============================================================================
+// UTILITY FUNCTIONS
+// ============================================================================
+
+/**
+ * Fetch and display the current git commit SHA in the UI.
+ * Provides version information for debugging and transparency.
+ *
+ * @function fetchGitVersion
+ * @returns {void}
+ * @private
+ */
+function fetchGitVersion() {
+	fetch('https://api.github.com/repos/barakplasma/Accessible-guitar-tuner/git/refs/heads/master')
+		.then(response => response.json())
+		.then(data => {
+			const shortSha = data.object.sha.substring(0, 7);
+			const git_tag_element = document.getElementById('git-tag');
+
+			if (git_tag_element) {
+				git_tag_element.textContent = shortSha;
+				git_tag_element.title = `Full SHA: ${data.object.sha}`;
+			}
+		})
+		.catch(error => {
+			console.log('Could not fetch git tag:', error);
+		});
+}
+
+// ============================================================================
+// APPLICATION STARTUP
+// ============================================================================
+
+// Initialize application when DOM is fully loaded
+window.addEventListener("load", initialize);
 </head>
 
 <body>
