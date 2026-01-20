@@ -361,19 +361,30 @@ function initializeCorrelationWorker() {
 
 /**
  * Request microphone access from the user.
- * Uses browser-specific getUserMedia implementations for cross-browser compatibility.
+ * Uses modern MediaDevices API for cross-browser compatibility.
  *
  * @function requestMicrophoneAccess
  * @returns {void}
  * @private
  */
 function requestMicrophoneAccess() {
-	// Handle browser-specific getUserMedia implementations
-	const get_user_media = navigator.getUserMedia ||
-		navigator.webkitGetUserMedia ||
-		navigator.mozGetUserMedia;
+	// Use modern MediaDevices API (supported in all modern browsers)
+	if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+		navigator.mediaDevices.getUserMedia({ audio: true })
+			.then(use_stream)
+			.catch(handleMicrophoneError);
+	} else {
+		// Fallback for older browsers
+		const get_user_media = navigator.getUserMedia ||
+			navigator.webkitGetUserMedia ||
+			navigator.mozGetUserMedia;
 
-	get_user_media.call(navigator, { "audio": true }, use_stream, handleMicrophoneError);
+		if (get_user_media) {
+			get_user_media.call(navigator, { "audio": true }, use_stream, handleMicrophoneError);
+		} else {
+			handleMicrophoneError(new Error("getUserMedia not supported in this browser"));
+		}
+	}
 }
 
 /**
@@ -474,8 +485,8 @@ function use_stream(stream) {
 	update_audio_status("✅ Microphone connected");
 	update_status("Listening for notes...");
 
-	// Create audio context and processing chain
-	const audio_context = new AudioContext();
+	// Create audio context with modern API (supports both legacy and modern browsers)
+	const audio_context = new (window.AudioContext || window.webkitAudioContext)();
 	const microphone = audio_context.createMediaStreamSource(stream);
 
 	// Store microphone globally to prevent garbage collection
